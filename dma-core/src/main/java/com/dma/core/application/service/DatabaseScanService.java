@@ -14,9 +14,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
+import java.sql.*;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -193,6 +192,65 @@ public class DatabaseScanService {
         } catch (SQLException e) {
             log.warn("Failed to extract objects: {}", e.getMessage());
             return List.of();
+        }
+    }
+
+    /**
+     * 发现/列出源数据库中可用的 schema（数据库）列表。
+     */
+    public List<String> discoverSchemas(DatabaseType dbType, String host, int port,
+                                         String username, String password) throws SQLException {
+        String jdbcUrl = buildJdbcUrl(dbType, host, port, "");
+        log.info("Discovering schemas: {}", jdbcUrl);
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, username, password)) {
+            return switch (dbType) {
+                case MYSQL -> {
+                    List<String> schemas = new ArrayList<>();
+                    try (Statement stmt = conn.createStatement();
+                         ResultSet rs = stmt.executeQuery("SHOW DATABASES")) {
+                        while (rs.next()) {
+                            String name = rs.getString(1);
+                            // 过滤系统库
+                            if (!name.equalsIgnoreCase("information_schema")
+                                    && !name.equalsIgnoreCase("performance_schema")
+                                    && !name.equalsIgnoreCase("mysql")
+                                    && !name.equalsIgnoreCase("sys")) {
+                                schemas.add(name);
+                            }
+                        }
+                    }
+                    yield schemas;
+                }
+                case ORACLE -> {
+                    List<String> schemas = new ArrayList<>();
+                    try (Statement stmt = conn.createStatement();
+                         ResultSet rs = stmt.executeQuery(
+                             "SELECT USERNAME FROM ALL_USERS ORDER BY USERNAME")) {
+                        while (rs.next()) schemas.add(rs.getString(1));
+                    }
+                    yield schemas;
+                }
+                case POSTGRESQL -> {
+                    List<String> schemas = new ArrayList<>();
+                    try (Statement stmt = conn.createStatement();
+                         ResultSet rs = stmt.executeQuery(
+                             "SELECT schema_name FROM information_schema.schemata " +
+                             "WHERE schema_name NOT IN ('pg_catalog','information_schema') " +
+                             "ORDER BY schema_name")) {
+                        while (rs.next()) schemas.add(rs.getString(1));
+                    }
+                    yield schemas;
+                }
+                default -> {
+                    // 其他数据库尝试用 JDBC metadata
+                    List<String> schemas = new ArrayList<>();
+                    var meta = conn.getMetaData();
+                    try (ResultSet rs = meta.getCatalogs()) {
+                        while (rs.next()) schemas.add(rs.getString("TABLE_CAT"));
+                    }
+                    yield schemas;
+                }
+            };
         }
     }
 }

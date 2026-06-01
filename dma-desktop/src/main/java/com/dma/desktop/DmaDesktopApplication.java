@@ -34,8 +34,8 @@ public class DmaDesktopApplication extends Application {
     private HttpClient httpClient;
 
     // === 数据库体检页组件 ===
-    private TextField dbHostField, dbPortField, dbUserField, dbPasswordField, dbNameField;
-    private ComboBox<String> dbSourceCombo, dbTargetCombo;
+    private TextField dbHostField, dbPortField, dbUserField, dbPasswordField;
+    private ComboBox<String> dbSchemaCombo, dbSourceCombo, dbTargetCombo;
     private TextArea dbResultArea;
     private Label dbStatusLabel;
     private ProgressIndicator dbProgress;
@@ -107,14 +107,22 @@ public class DmaDesktopApplication extends Application {
         dbPortField = new TextField("3306"); dbPortField.setPrefWidth(70); dbPortField.setPromptText("端口");
         dbUserField = new TextField("root"); dbUserField.setPrefWidth(100); dbUserField.setPromptText("用户名");
         dbPasswordField = new PasswordField(); dbPasswordField.setPrefWidth(100); dbPasswordField.setPromptText("密码"); dbPasswordField.setText("");
-        dbNameField = new TextField("test"); dbNameField.setPrefWidth(120); dbNameField.setPromptText("数据库名");
+        dbSchemaCombo = new ComboBox<>();
+        dbSchemaCombo.setPrefWidth(160);
+        dbSchemaCombo.setPromptText("先连接后选择");
+        dbSchemaCombo.setEditable(false);
+
+        Button connectBtn = new Button("获取Schema");
+        connectBtn.setStyle("-fx-background-color: #0891b2; -fx-text-fill: white;");
+        connectBtn.setOnAction(e -> discoverSchemas());
 
         connRow.getChildren().addAll(
                 new Label("主机:"), dbHostField,
                 new Label("端口:"), dbPortField,
                 new Label("用户:"), dbUserField,
                 new Label("密码:"), dbPasswordField,
-                new Label("库名:"), dbNameField
+                connectBtn,
+                new Label("Schema:"), dbSchemaCombo
         );
 
         // 数据库类型选择 + 扫描按钮
@@ -160,6 +168,74 @@ public class DmaDesktopApplication extends Application {
         return root;
     }
 
+    /** 连接数据库并获取可用 Schema 列表 */
+    private void discoverSchemas() {
+        dbStatusLabel.setText("正在获取 Schema 列表...");
+        dbStatusLabel.setTextFill(Color.valueOf("#0891b2"));
+
+        String jsonBody = String.format("""
+            {
+                "host": "%s",
+                "port": %s,
+                "username": "%s",
+                "password": "%s",
+                "sourceDbType": "%s"
+            }
+            """,
+            dbHostField.getText(), dbPortField.getText(),
+            dbUserField.getText(), dbPasswordField.getText(),
+            dbSourceCombo.getValue()
+        );
+
+        new Thread(() -> {
+            try {
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:8080/api/v1/scan/schemas"))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                        .build();
+
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+                Platform.runLater(() -> {
+                    if (response.statusCode() == 200) {
+                        String body = response.body();
+                        // 解析 JSON 数组
+                        java.util.List<String> schemas = new java.util.ArrayList<>();
+                        int idx = body.indexOf('[');
+                        if (idx >= 0) {
+                            String arr = body.substring(idx);
+                            java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"([^\"]+)\"")
+                                    .matcher(arr);
+                            while (m.find()) schemas.add(m.group(1));
+                        }
+                        dbSchemaCombo.getItems().setAll(schemas);
+                        if (!schemas.isEmpty()) {
+                            dbSchemaCombo.setValue(schemas.get(0));
+                            dbStatusLabel.setText("找到 " + schemas.size() + " 个 Schema ✓");
+                            dbStatusLabel.setTextFill(Color.valueOf("#16a34a"));
+                        } else {
+                            dbStatusLabel.setText("未找到可用 Schema");
+                            dbStatusLabel.setTextFill(Color.valueOf("#d97706"));
+                        }
+                    } else {
+                        dbStatusLabel.setText("连接失败 ✗");
+                        dbStatusLabel.setTextFill(Color.valueOf("#dc2626"));
+                        dbSchemaCombo.getItems().clear();
+                        dbSchemaCombo.setPromptText("连接失败，请检查配置");
+                    }
+                });
+            } catch (Exception e) {
+                Platform.runLater(() -> {
+                    dbStatusLabel.setText("连接失败: " + e.getMessage());
+                    dbStatusLabel.setTextFill(Color.valueOf("#dc2626"));
+                    dbSchemaCombo.getItems().clear();
+                    dbSchemaCombo.setPromptText("无法连接");
+                });
+            }
+        }).start();
+    }
+
     private void runDatabaseScan() {
         dbProgress.setVisible(true);
         dbStatusLabel.setText("正在连接数据库...");
@@ -178,7 +254,7 @@ public class DmaDesktopApplication extends Application {
             """,
             dbHostField.getText(), dbPortField.getText(),
             dbUserField.getText(), dbPasswordField.getText(),
-            dbNameField.getText(),
+            dbSchemaCombo.getValue() != null ? dbSchemaCombo.getValue() : "",
             dbSourceCombo.getValue(), dbTargetCombo.getValue()
         );
 

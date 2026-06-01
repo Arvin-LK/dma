@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -65,6 +66,29 @@ public class ScanDatabaseController {
         } catch (Exception e) {
             log.error("Database scan failed", e);
             return ApiResponse.error(500, "数据库扫描失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 获取源数据库中可用的 Schema/数据库 列表。
+     * 先连接，再查询，用户从列表中选择目标库。
+     */
+    @PostMapping("/schemas")
+    public ApiResponse<List<String>> discoverSchemas(@RequestBody Map<String, Object> body) {
+        try {
+            DatabaseType dbType = DatabaseType.valueOf((String) body.get("sourceDbType"));
+            String host = (String) body.get("host");
+            int port = ((Number) body.get("port")).intValue();
+            String username = (String) body.get("username");
+            String password = (String) body.get("password");
+
+            log.info("Discovering schemas for {}:{}", host, port);
+            List<String> schemas = scanService.discoverSchemas(dbType, host, port, username, password);
+            return ApiResponse.success(schemas);
+
+        } catch (Exception e) {
+            log.error("Schema discovery failed", e);
+            return ApiResponse.error(500, "获取 Schema 列表失败: " + e.getMessage());
         }
     }
 }
