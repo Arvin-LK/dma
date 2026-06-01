@@ -52,6 +52,13 @@ public class DmaDesktopApplication extends Application {
     private ComboBox<String> spSourceCombo, spTargetCombo;
     private Label spStatusLabel;
 
+    // === 项目源码扫描页组件 ===
+    private TextField projectPathField;
+    private ComboBox<String> projSourceCombo, projTargetCombo;
+    private TextArea projResult;
+    private Label projStatusLabel;
+    private ProgressIndicator projProgress;
+
     public static void main(String[] args) {
         launch(args);
     }
@@ -82,8 +89,12 @@ public class DmaDesktopApplication extends Application {
         Tab spTab = new Tab("存储过程迁移");
         spTab.setClosable(false);
         spTab.setContent(buildProcedurePage());
+        // Tab 4: 项目源码扫描
+        Tab projTab = new Tab("项目源码扫描");
+        projTab.setClosable(false);
+        projTab.setContent(buildProjectScanPage());
 
-        tabPane.getTabs().addAll(dbScanTab, sqlTab, spTab);
+        tabPane.getTabs().addAll(dbScanTab, sqlTab, spTab, projTab);
         tabPane.getSelectionModel().select(0);
 
         Scene scene = new Scene(tabPane);
@@ -612,6 +623,183 @@ public class DmaDesktopApplication extends Application {
                 Platform.runLater(() -> sqlStatusLabel.setText("失败: " + e.getMessage()));
             }
         }).start();
+    }
+
+    // ==================== 项目源码扫描页面 ====================
+
+    private VBox buildProjectScanPage() {
+        VBox root = new VBox(12);
+        root.setPadding(new Insets(16));
+        root.setStyle("-fx-background-color: #f8fafc;");
+
+        Label title = new Label("项目源码扫描");
+        title.setFont(Font.font("System", FontWeight.BOLD, 22));
+        title.setTextFill(Color.valueOf("#059669"));
+
+        Label subtitle = new Label("扫描整个项目目录，自动识别 Java/XML/SQL 中的数据库相关代码，检测迁移风险");
+        subtitle.setFont(Font.font("System", 14));
+        subtitle.setTextFill(Color.valueOf("#64748b"));
+
+        // 项目路径选择
+        HBox pathRow = new HBox(8);
+        pathRow.setAlignment(Pos.CENTER_LEFT);
+        pathRow.setPadding(new Insets(12));
+        pathRow.setStyle("-fx-background-color: white; -fx-border-color: #e2e8f0; -fx-border-radius: 8;");
+
+        projectPathField = new TextField(System.getProperty("user.dir"));
+        projectPathField.setPrefWidth(500);
+        projectPathField.setPromptText("项目根目录路径");
+
+        projSourceCombo = new ComboBox<>(FXCollections.observableArrayList("MYSQL", "ORACLE", "SQLSERVER"));
+        projSourceCombo.setValue("MYSQL"); projSourceCombo.setPrefWidth(120);
+        projTargetCombo = new ComboBox<>(FXCollections.observableArrayList("POSTGRESQL", "DAMENG", "GAUSSDB", "OCEANBASE", "GOLDENDB"));
+        projTargetCombo.setValue("POSTGRESQL"); projTargetCombo.setPrefWidth(120);
+
+        Button scanBtn = new Button("开始扫描");
+        scanBtn.setStyle("-fx-background-color: #059669; -fx-text-fill: white; -fx-font-size: 15px; -fx-font-weight: bold; -fx-padding: 10 28;");
+        scanBtn.setOnAction(e -> runProjectScan());
+
+        projProgress = new ProgressIndicator(-1);
+        projProgress.setVisible(false);
+        projProgress.setPrefSize(28, 28);
+
+        projStatusLabel = new Label("");
+        projStatusLabel.setTextFill(Color.valueOf("#64748b"));
+
+        pathRow.getChildren().addAll(
+                new Label("项目路径:"), projectPathField,
+                new Label("源:"), projSourceCombo,
+                new Label("目标:"), projTargetCombo,
+                scanBtn, projProgress, projStatusLabel
+        );
+
+        // 结果区
+        projResult = new TextArea();
+        projResult.setEditable(false);
+        projResult.setPrefRowCount(22);
+        projResult.setStyle("-fx-font-family: 'Consolas', 'Microsoft YaHei', monospace; -fx-font-size: 13px;");
+        VBox.setVgrow(projResult, Priority.ALWAYS);
+
+        root.getChildren().addAll(title, subtitle, pathRow, projResult);
+        return root;
+    }
+
+    private void runProjectScan() {
+        String path = projectPathField.getText().trim();
+        if (path.isEmpty()) return;
+
+        projProgress.setVisible(true);
+        projStatusLabel.setText("正在扫描...");
+        projResult.clear();
+
+        String jsonBody = String.format("""
+            {"projectPath": "%s", "sourceDbType": "%s", "targetDbType": "%s"}
+            """, escapeJson(path), projSourceCombo.getValue(), projTargetCombo.getValue());
+
+        new Thread(() -> {
+            try {
+                HttpRequest req = HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:8080/api/v1/scan/project-full"))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(jsonBody)).build();
+                String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
+                Platform.runLater(() -> {
+                    projProgress.setVisible(false);
+                    projStatusLabel.setText("扫描完成 ✓");
+                    projResult.setText(formatProjectScanResult(resp));
+                });
+            } catch (Exception e) {
+                Platform.runLater(() -> {
+                    projProgress.setVisible(false);
+                    projStatusLabel.setText("失败: " + e.getMessage());
+                });
+            }
+        }).start();
+    }
+
+    private String formatProjectScanResult(String json) {
+        StringBuilder sb = new StringBuilder();
+        try {
+            String body = json;
+            int dataIdx = json.indexOf("\"data\":");
+            if (dataIdx >= 0) body = json.substring(dataIdx + 6);
+
+            String path = extractJsonValue(body, "projectPath");
+            String srcDb = extractJsonValue(body, "sourceDbType");
+            String tgtDb = extractJsonValue(body, "targetDbType");
+            int totalFiles = extractJsonInt(body, "totalFiles");
+            int javaFiles = extractJsonInt(body, "javaFiles");
+            int xmlFiles = extractJsonInt(body, "xmlFiles");
+            int sqlFiles = extractJsonInt(body, "sqlFiles");
+            int totalIssues = extractJsonInt(body, "totalIssues");
+            int highRisk = extractJsonInt(body, "highRisk");
+            int mediumRisk = extractJsonInt(body, "mediumRisk");
+            int lowRisk = extractJsonInt(body, "lowRisk");
+            double riskScore = extractJsonDouble(body, "riskScore");
+
+            sb.append("╔══════════════════════════════════════════════╗\n");
+            sb.append("║        DMA 项目源码扫描报告                   ║\n");
+            sb.append("╚══════════════════════════════════════════════╝\n\n");
+            sb.append(String.format("  项目路径: %s\n", path));
+            sb.append(String.format("  迁移方向: %s → %s\n\n", srcDb, tgtDb));
+
+            // 文件统计
+            sb.append("  ────── 扫描文件 ──────\n\n");
+            int barLen = 30;
+            sb.append("  Java:    ").append(progressBar(javaFiles, totalFiles, barLen))
+              .append(String.format(" %d\n", javaFiles));
+            sb.append("  XML:     ").append(progressBar(xmlFiles, totalFiles, barLen))
+              .append(String.format(" %d\n", xmlFiles));
+            sb.append("  SQL:     ").append(progressBar(sqlFiles, totalFiles, barLen))
+              .append(String.format(" %d\n", sqlFiles));
+            sb.append(String.format("\n  共扫描: %d 个文件\n\n", totalFiles));
+
+            // 风险统计
+            sb.append("  ────── 发现问题 ──────\n\n");
+            sb.append(String.format("  ✗ 高风险: %d\n", highRisk));
+            sb.append(String.format("  ⚠ 中风险: %d\n", mediumRisk));
+            sb.append(String.format("  ℹ 低风险: %d\n", lowRisk));
+            sb.append(String.format("\n  总问题数: %d\n\n", totalIssues));
+
+            // 风险评分
+            String riskLevel;
+            if (riskScore >= 50) riskLevel = "⚠ 高风险";
+            else if (riskScore >= 20) riskLevel = "⚡ 中风险";
+            else riskLevel = "✓ 低风险";
+
+            sb.append(String.format("  迁移风险评分: %.0f/100  %s\n\n", riskScore, riskLevel));
+            int filled = (int) (riskScore / 100.0 * 40);
+            sb.append("  [");
+            for (int i = 0; i < 40; i++) sb.append(i < filled ? "█" : "░");
+            sb.append(String.format("] %.0f%%\n\n", riskScore));
+
+            // 问题示例
+            if (totalIssues > 0) {
+                sb.append("  ────── 问题示例（前 10 条）──────\n\n");
+                Pattern p = Pattern.compile(
+                    "\"ruleCode\":\"([^\"]+)\".*?\"severity\":\"([^\"]+)\".*?\"compatibilityLevel\":\"([^\"]+)\".*?\"message\":\"([^\"]+)\""
+                );
+                Matcher m = p.matcher(body);
+                int count = 0;
+                while (m.find() && count < 10) {
+                    count++;
+                    String sev = m.group(2);
+                    String icon = "ERROR".equals(sev) ? "✗" : ("WARNING".equals(sev) ? "⚠" : "ℹ");
+                    sb.append(String.format("  [%s] %s — %s\n", icon, m.group(1), m.group(4)));
+                }
+            }
+
+            sb.append("\n══════════════════════════════════════════════\n");
+        } catch (Exception e) {
+            sb.append("  格式化错误: ").append(e.getMessage()).append("\n");
+        }
+        return sb.toString();
+    }
+
+    private String progressBar(int count, int total, int len) {
+        if (total == 0) return "░".repeat(len);
+        int filled = (int) ((double) count / total * len);
+        return "█".repeat(Math.min(filled, len)) + "░".repeat(Math.max(0, len - filled));
     }
 
     // ==================== 格式化 SQL 转换结果 ====================
