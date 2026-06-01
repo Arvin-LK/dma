@@ -13,51 +13,79 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.List;
 
 /**
- * 从 classpath:rules/*.json 加载内置规则。
+ * 从 classpath 加载内置规则（支持 JAR 内和文件系统两种来源）。
  */
 @Component
 public class JsonFileRuleLoader implements RuleLoader {
 
     private static final Logger log = LoggerFactory.getLogger(JsonFileRuleLoader.class);
-    private static final String RULES_LOCATION = "classpath:rules/*.json";
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
     public List<MigrationRule> load(DatabaseType source, DatabaseType target) {
         List<MigrationRule> rules = new ArrayList<>();
+        String expectedName = source.name().toLowerCase() + "-" + target.name().toLowerCase() + ".json";
+
         try {
-            Resource[] resources = new PathMatchingResourcePatternResolver()
-                    .getResources(RULES_LOCATION);
-            for (Resource resource : resources) {
-                String filename = resource.getFilename();
-                String expectedName = source.name().toLowerCase() + "-"
-                        + target.name().toLowerCase() + ".json";
-                if (filename != null && filename.equalsIgnoreCase(expectedName)) {
-                    rules.addAll(parseFile(resource));
+            // 方法1: 从 classpath 搜索
+            Enumeration<URL> resources = Thread.currentThread().getContextClassLoader()
+                    .getResources("rules/");
+            while (resources.hasMoreElements()) {
+                URL dirUrl = resources.nextElement();
+                try {
+                    Path dirPath = Paths.get(dirUrl.toURI());
+                    if (Files.isDirectory(dirPath)) {
+                        try (var stream = Files.list(dirPath)) {
+                            stream.filter(p -> p.getFileName().toString().equalsIgnoreCase(expectedName))
+                                  .forEach(p -> {
+                                      try (InputStream is = Files.newInputStream(p)) {
+                                          rules.addAll(parseStream(is, expectedName));
+                                      } catch (IOException e) { log.warn("Cannot read: {}", p, e); }
+                                  });
+                        }
+                    }
+                } catch (Exception e) {
+                    // JAR 内的资源：尝试直接加载
+                    URL fileUrl = Thread.currentThread().getContextClassLoader()
+                            .getResource("rules/" + expectedName);
+                    if (fileUrl != null) {
+                        try (InputStream is = fileUrl.openStream()) {
+                            rules.addAll(parseStream(is, expectedName));
+                        } catch (IOException ex) { log.warn("Cannot load from JAR: {}", fileUrl, ex); }
+                    }
                 }
             }
         } catch (IOException e) {
             log.error("Failed to load rule files", e);
         }
-        log.info("Loaded {} rules for {} -> {}", rules.size(), source, target);
+
+        if (rules.isEmpty()) {
+            log.warn("No rules loaded for {} -> {} (expected file: {})", source, target, expectedName);
+        } else {
+            log.info("Loaded {} rules for {} -> {}", rules.size(), source, target);
+        }
         return rules;
     }
 
-    private List<MigrationRule> parseFile(Resource resource) throws IOException {
+    private List<MigrationRule> parseStream(InputStream is, String filename) throws IOException {
         List<MigrationRule> rules = new ArrayList<>();
-        JsonNode root = objectMapper.readTree(resource.getInputStream());
+        JsonNode root = objectMapper.readTree(is);
         JsonNode rulesNode = root.get("rules");
         if (rulesNode == null || !rulesNode.isArray()) {
-            throw new RuleFormatException(resource.getFilename(), null);
+            throw new RuleFormatException(filename, null);
         }
         for (JsonNode node : rulesNode) {
             rules.add(parseRule(node));

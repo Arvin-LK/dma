@@ -1,0 +1,2 @@
+CREATE TABLE t (created_at DATETIME, flag TINYINT, content MEDIUMTEXT, data BLOB);
+CREATE TABLE t (age INT UNSIGNED);

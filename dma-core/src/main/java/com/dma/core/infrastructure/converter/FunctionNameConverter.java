@@ -7,7 +7,11 @@ import org.springframework.stereotype.Component;
 @Component
 public class FunctionNameConverter implements SqlConvertStrategy {
     @Override
-    public boolean supports(ScanResult issue) { return "FUNCTION".equals(issue.getSeverity()) || issue.getMessage().contains("函数"); }
+    public boolean supports(ScanResult issue) {
+        String sql = issue.getSourceSql().toUpperCase();
+        return sql.contains("IFNULL(") || sql.contains("NVL(") || sql.contains("NOW()")
+            || sql.contains("SYSDATE") || sql.contains("UUID()");
+    }
     @Override
     public String convert(String sql) {
         return sql.replace("IFNULL(", "COALESCE(")

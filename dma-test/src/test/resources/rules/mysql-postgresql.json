@@ -1,0 +1,221 @@
+{
+  "meta": {
+    "sourceDb": "MYSQL",
+    "targetDb": "POSTGRESQL",
+    "version": "1.0.0",
+    "description": "MySQL 到 PostgreSQL 迁移兼容性规则集",
+    "author": "DMA Team"
+  },
+  "rules": [
+    {
+      "code": "M2PG-FN-001", "name": "IFNULL → COALESCE", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "IFNULL(${expr1}, ${expr2})", "replacementPattern": "COALESCE(${expr1}, ${expr2})",
+      "description": "MySQL IFNULL 函数需替换为 PostgreSQL COALESCE 函数，功能等价",
+      "exampleSqlSource": "SELECT IFNULL(name, 'N/A') FROM users;", "exampleSqlTarget": "SELECT COALESCE(name, 'N/A') FROM users;"
+    },
+    {
+      "code": "M2PG-FN-002", "name": "NOW() → CURRENT_TIMESTAMP", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "NOW()", "replacementPattern": "CURRENT_TIMESTAMP",
+      "description": "MySQL NOW() 函数在 PostgreSQL 中建议使用 CURRENT_TIMESTAMP",
+      "exampleSqlSource": "SELECT NOW();", "exampleSqlTarget": "SELECT CURRENT_TIMESTAMP;"
+    },
+    {
+      "code": "M2PG-FN-003", "name": "GROUP_CONCAT → STRING_AGG", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "GROUP_CONCAT(${expr} SEPARATOR ${sep})", "replacementPattern": "STRING_AGG(${expr}, ${sep})",
+      "description": "MySQL GROUP_CONCAT 需替换为 PG STRING_AGG，SEPARATOR 变为逗号分隔参数",
+      "exampleSqlSource": "SELECT GROUP_CONCAT(name SEPARATOR ',') FROM users;", "exampleSqlTarget": "SELECT STRING_AGG(name, ',') FROM users;"
+    },
+    {
+      "code": "M2PG-FN-004", "name": "DATE_FORMAT → TO_CHAR", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "DATE_FORMAT(${date}, ${format})", "replacementPattern": "TO_CHAR(${date}, ${format})",
+      "description": "MySQL DATE_FORMAT 需替换为 PG TO_CHAR，注意格式字符串差异",
+      "exampleSqlSource": "SELECT DATE_FORMAT(created_at, '%Y-%m-%d') FROM orders;", "exampleSqlTarget": "SELECT TO_CHAR(created_at, 'YYYY-MM-DD') FROM orders;"
+    },
+    {
+      "code": "M2PG-FN-005", "name": "UNIX_TIMESTAMP → EXTRACT(EPOCH)", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "UNIX_TIMESTAMP(${expr})", "replacementPattern": "EXTRACT(EPOCH FROM ${expr})",
+      "description": "MySQL UNIX_TIMESTAMP 需替换为 PG EXTRACT(EPOCH FROM ...)",
+      "exampleSqlSource": "SELECT UNIX_TIMESTAMP(created_at) FROM orders;", "exampleSqlTarget": "SELECT EXTRACT(EPOCH FROM created_at) FROM orders;"
+    },
+    {
+      "code": "M2PG-FN-006", "name": "CONCAT_WS（兼容）", "category": "BUILTIN_FUNCTION", "severity": "INFO", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "CONCAT_WS(${sep}, ${exprs})", "replacementPattern": "CONCAT_WS(${sep}, ${exprs})",
+      "description": "MySQL CONCAT_WS 在 PG 14+ 中已支持，无需转换",
+      "exampleSqlSource": "SELECT CONCAT_WS('-', first_name, last_name) FROM users;", "exampleSqlTarget": "SELECT CONCAT_WS('-', first_name, last_name) FROM users;"
+    },
+    {
+      "code": "M2PG-FN-007", "name": "FIND_IN_SET → POSITION + ANY", "category": "BUILTIN_FUNCTION", "severity": "ERROR", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "FIND_IN_SET(${str}, ${list})", "replacementPattern": "string_to_array(${list}, ',') @> ARRAY[${str}]",
+      "description": "MySQL FIND_IN_SET 需重写为 PG 数组操作，逻辑不完全等价需人工审核",
+      "exampleSqlSource": "SELECT * FROM t WHERE FIND_IN_SET('a', tags);", "exampleSqlTarget": "SELECT * FROM t WHERE string_to_array(tags, ',') @> ARRAY['a'];"
+    },
+    {
+      "code": "M2PG-FN-008", "name": "STR_TO_DATE → TO_TIMESTAMP", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "STR_TO_DATE(${str}, ${format})", "replacementPattern": "TO_TIMESTAMP(${str}, ${format})",
+      "description": "MySQL STR_TO_DATE 需替换为 PG TO_TIMESTAMP，格式字符串需调整",
+      "exampleSqlSource": "SELECT STR_TO_DATE('2024-01-01', '%Y-%m-%d');", "exampleSqlTarget": "SELECT TO_TIMESTAMP('2024-01-01', 'YYYY-MM-DD');"
+    },
+    {
+      "code": "M2PG-FN-009", "name": "UUID → gen_random_uuid", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "UUID()", "replacementPattern": "gen_random_uuid()",
+      "description": "MySQL UUID() 需替换为 PG gen_random_uuid() (需 pgcrypto 扩展)",
+      "exampleSqlSource": "INSERT INTO t (id) VALUES (UUID());", "exampleSqlTarget": "INSERT INTO t (id) VALUES (gen_random_uuid());"
+    },
+    {
+      "code": "M2PG-FN-010", "name": "LAST_INSERT_ID → lastval", "category": "BUILTIN_FUNCTION", "severity": "ERROR", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "LAST_INSERT_ID()", "replacementPattern": "lastval()",
+      "description": "MySQL LAST_INSERT_ID() 需替换为 PG lastval()，语义有差异需验证",
+      "exampleSqlSource": "SELECT LAST_INSERT_ID();", "exampleSqlTarget": "SELECT lastval();"
+    },
+    {
+      "code": "M2PG-FN-011", "name": "SLEEP → pg_sleep", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "SLEEP(${n})", "replacementPattern": "pg_sleep(${n})",
+      "description": "MySQL SLEEP(n) 需替换为 PG pg_sleep(n)",
+      "exampleSqlSource": "SELECT SLEEP(1);", "exampleSqlTarget": "SELECT pg_sleep(1);"
+    },
+    {
+      "code": "M2PG-FN-012", "name": "REGEXP → ~ 运算符", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "${col} REGEXP ${pattern}", "replacementPattern": "${col} ~ ${pattern}",
+      "description": "MySQL col REGEXP pattern 需替换为 PG col ~ pattern",
+      "exampleSqlSource": "SELECT * FROM t WHERE name REGEXP '^A';", "exampleSqlTarget": "SELECT * FROM t WHERE name ~ '^A';"
+    },
+    {
+      "code": "M2PG-SYN-001", "name": "LIMIT m,n → LIMIT n OFFSET m", "category": "SYNTAX", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "LIMIT ${offset}, ${count}", "replacementPattern": "LIMIT ${count} OFFSET ${offset}",
+      "description": "MySQL LIMIT offset,count 语法需转换为 PG LIMIT count OFFSET offset",
+      "exampleSqlSource": "SELECT * FROM users LIMIT 10, 20;", "exampleSqlTarget": "SELECT * FROM users LIMIT 20 OFFSET 10;"
+    },
+    {
+      "code": "M2PG-SYN-002", "name": "反引号标识符 → 双引号", "category": "SYNTAX", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "`", "replacementPattern": "\"",
+      "description": "MySQL 使用反引号包围标识符，PG 使用双引号",
+      "exampleSqlSource": "SELECT `id`, `name` FROM `users`;", "exampleSqlTarget": "SELECT \"id\", \"name\" FROM \"users\";"
+    },
+    {
+      "code": "M2PG-SYN-003", "name": "AUTO_INCREMENT → SERIAL/BIGSERIAL", "category": "SYNTAX", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "INT AUTO_INCREMENT", "replacementPattern": "SERIAL",
+      "description": "MySQL AUTO_INCREMENT 需替换为 PG SERIAL (int) 或 BIGSERIAL (bigint)",
+      "exampleSqlSource": "CREATE TABLE t (id INT AUTO_INCREMENT PRIMARY KEY);", "exampleSqlTarget": "CREATE TABLE t (id SERIAL PRIMARY KEY);"
+    },
+    {
+      "code": "M2PG-SYN-004", "name": "ENGINE=InnoDB → 移除", "category": "SYNTAX", "severity": "INFO", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "ENGINE=${engine}", "replacementPattern": "",
+      "description": "MySQL ENGINE 子句在 PG 中不存在，需移除",
+      "exampleSqlSource": "CREATE TABLE t (id INT) ENGINE=InnoDB;", "exampleSqlTarget": "CREATE TABLE t (id INT);"
+    },
+    {
+      "code": "M2PG-SYN-005", "name": "REPLACE INTO → INSERT ON CONFLICT", "category": "SYNTAX", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "REPLACE INTO ${table}", "replacementPattern": "INSERT INTO ${table} ... ON CONFLICT DO UPDATE",
+      "description": "MySQL REPLACE INTO 需替换为 PG INSERT ... ON CONFLICT DO UPDATE，需人工调整",
+      "exampleSqlSource": "REPLACE INTO users (id,name) VALUES (1,'Alice');", "exampleSqlTarget": "INSERT INTO users (id,name) VALUES (1,'Alice') ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name;"
+    },
+    {
+      "code": "M2PG-SYN-006", "name": "SHOW TABLES → information_schema", "category": "SYNTAX", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "SHOW TABLES", "replacementPattern": "SELECT table_name FROM information_schema.tables WHERE table_schema='public'",
+      "description": "MySQL SHOW TABLES 需替换为 PG 系统表查询",
+      "exampleSqlSource": "SHOW TABLES;", "exampleSqlTarget": "SELECT table_name FROM information_schema.tables WHERE table_schema='public';"
+    },
+    {
+      "code": "M2PG-DT-001", "name": "DATETIME → TIMESTAMP", "category": "DATATYPE", "severity": "WARNING", "patternType": "DATATYPE",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "DATETIME", "replacementPattern": "TIMESTAMP",
+      "description": "MySQL DATETIME 映射为 PG TIMESTAMP",
+      "exampleSqlSource": "CREATE TABLE t (created_at DATETIME);", "exampleSqlTarget": "CREATE TABLE t (created_at TIMESTAMP);"
+    },
+    {
+      "code": "M2PG-DT-002", "name": "TINYINT → SMALLINT", "category": "DATATYPE", "severity": "WARNING", "patternType": "DATATYPE",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "TINYINT", "replacementPattern": "SMALLINT",
+      "description": "MySQL TINYINT 映射为 PG SMALLINT",
+      "exampleSqlSource": "CREATE TABLE t (flag TINYINT);", "exampleSqlTarget": "CREATE TABLE t (flag SMALLINT);"
+    },
+    {
+      "code": "M2PG-DT-003", "name": "MEDIUMTEXT → TEXT", "category": "DATATYPE", "severity": "INFO", "patternType": "DATATYPE",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "MEDIUMTEXT", "replacementPattern": "TEXT",
+      "description": "MySQL MEDIUMTEXT 在 PG 中使用 TEXT 即可（PG TEXT 无长度限制）",
+      "exampleSqlSource": "CREATE TABLE t (content MEDIUMTEXT);", "exampleSqlTarget": "CREATE TABLE t (content TEXT);"
+    },
+    {
+      "code": "M2PG-DT-004", "name": "BLOB → BYTEA", "category": "DATATYPE", "severity": "WARNING", "patternType": "DATATYPE",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "BLOB", "replacementPattern": "BYTEA",
+      "description": "MySQL BLOB 映射为 PG BYTEA",
+      "exampleSqlSource": "CREATE TABLE t (data BLOB);", "exampleSqlTarget": "CREATE TABLE t (data BYTEA);"
+    },
+    {
+      "code": "M2PG-DT-005", "name": "UNSIGNED 移除 + CHECK", "category": "DATATYPE", "severity": "WARNING", "patternType": "DATATYPE",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "INT UNSIGNED", "replacementPattern": "INT CHECK (${col} >= 0)",
+      "description": "MySQL UNSIGNED 需通过 PG CHECK 约束实现",
+      "exampleSqlSource": "CREATE TABLE t (age INT UNSIGNED);", "exampleSqlTarget": "CREATE TABLE t (age INT CHECK (age >= 0));"
+    },
+    {
+      "code": "M2PG-DDL-001", "name": "TEMPORARY TABLE → TEMP TABLE", "category": "DDL", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "CREATE TEMPORARY TABLE", "replacementPattern": "CREATE TEMP TABLE",
+      "description": "MySQL CREATE TEMPORARY TABLE 需改为 PG CREATE TEMP TABLE",
+      "exampleSqlSource": "CREATE TEMPORARY TABLE tmp (id INT);", "exampleSqlTarget": "CREATE TEMP TABLE tmp (id INT);"
+    },
+    {
+      "code": "M2PG-DDL-002", "name": "DROP IF EXISTS 兼容性", "category": "DDL", "severity": "INFO", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "DROP TABLE IF EXISTS", "replacementPattern": "DROP TABLE IF EXISTS",
+      "description": "MySQL DROP TABLE IF EXISTS 在 PG 中语法兼容",
+      "exampleSqlSource": "DROP TABLE IF EXISTS users;", "exampleSqlTarget": "DROP TABLE IF EXISTS users;"
+    },
+    {
+      "code": "M2PG-DDL-003", "name": "ALTER MODIFY → ALTER ALTER", "category": "DDL", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "ALTER TABLE ${table} MODIFY COLUMN", "replacementPattern": "ALTER TABLE ${table} ALTER COLUMN",
+      "description": "MySQL ALTER MODIFY COLUMN 需改为 PG ALTER ALTER COLUMN",
+      "exampleSqlSource": "ALTER TABLE users MODIFY COLUMN name VARCHAR(100);", "exampleSqlTarget": "ALTER TABLE users ALTER COLUMN name TYPE VARCHAR(100);"
+    },
+    {
+      "code": "M2PG-DDL-004", "name": "RENAME TABLE → ALTER RENAME", "category": "DDL", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "RENAME TABLE ${old} TO ${new}", "replacementPattern": "ALTER TABLE ${old} RENAME TO ${new}",
+      "description": "MySQL RENAME TABLE 语法需改为 PG ALTER TABLE RENAME TO",
+      "exampleSqlSource": "RENAME TABLE old_users TO users;", "exampleSqlTarget": "ALTER TABLE old_users RENAME TO users;"
+    },
+    {
+      "code": "M2PG-OTH-001", "name": "USE database → SET search_path", "category": "OTHER", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "USE ${db}", "replacementPattern": "SET search_path TO ${db}",
+      "description": "MySQL USE database 需替换为 PG SET search_path TO schema",
+      "exampleSqlSource": "USE mydb;", "exampleSqlTarget": "SET search_path TO mydb;"
+    },
+    {
+      "code": "M2PG-OTH-002", "name": "LOCK/UNLOCK TABLES → 事务", "category": "OTHER", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "LOCK TABLES", "replacementPattern": "",
+      "description": "MySQL LOCK/UNLOCK TABLES 在 PG 中由事务隔离级别替代，需人工重写",
+      "exampleSqlSource": "LOCK TABLES users WRITE;", "exampleSqlTarget": "-- 使用 PG 事务: BEGIN; -- 或 LOCK TABLE users IN EXCLUSIVE MODE;"
+    },
+    {
+      "code": "M2PG-OTH-003", "name": "MySQL 注释语法（#）", "category": "OTHER", "severity": "INFO", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "POSTGRESQL",
+      "matchPattern": "#", "replacementPattern": "--",
+      "description": "MySQL 支持 # 单行注释，PG 使用 -- 或 /* */",
+      "exampleSqlSource": "SELECT * FROM users; # 这是注释", "exampleSqlTarget": "SELECT * FROM users; -- 这是注释"
+    }
+  ]
+}

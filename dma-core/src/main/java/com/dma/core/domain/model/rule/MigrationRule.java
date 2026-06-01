@@ -30,7 +30,25 @@ public class MigrationRule {
         this.replacementPattern = replacementPattern; this.enabled = true;
     }
 
-    public boolean matches(String sql) { return enabled && sql != null && sql.contains(matchPattern.expression()); }
+    public boolean matches(String sql) {
+        if (!enabled || sql == null) return false;
+        String upperSql = sql.toUpperCase();
+        String pattern = matchPattern.expression();
+        // Handle regex patterns
+        if (pattern.startsWith("regex:")) {
+            String regex = pattern.substring(6);
+            return java.util.regex.Pattern.compile(regex, java.util.regex.Pattern.CASE_INSENSITIVE)
+                    .matcher(sql).find();
+        }
+        // Handle patterns with placeholders: extract keyword before the first ${
+        int placeholderIdx = pattern.indexOf("${");
+        if (placeholderIdx > 0) {
+            String keyword = pattern.substring(0, placeholderIdx).trim().toUpperCase();
+            return upperSql.contains(keyword);
+        }
+        // Simple patterns: direct contains check
+        return upperSql.contains(pattern.toUpperCase());
+    }
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean e) { this.enabled = e; }
     public RuleId getId() { return id; }

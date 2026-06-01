@@ -1,0 +1,11 @@
+SELECT NVL(name, 'N/A') FROM users;
+SELECT NVL2(name, 'HasName', 'NoName') FROM users;
+SELECT DECODE(status, 1, 'Active', 0, 'Inactive') FROM users;
+SELECT SYSDATE FROM dual;
+SELECT TO_DATE('2024-01-01', 'YYYY-MM-DD') FROM dual;
+SELECT TO_CHAR(SYSDATE, 'YYYY-MM-DD') FROM dual;
+SELECT TO_NUMBER('123') FROM dual;
+SELECT SUBSTR(name, 1, 5) FROM users;
+SELECT INSTR(name, 'a') FROM users;
+SELECT TRUNC(SYSDATE, 'MON') FROM dual;
+SELECT * FROM users WHERE ROWNUM <= 10;

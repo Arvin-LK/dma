@@ -25,8 +25,7 @@ public class RuleEngine {
     private final Map<String, List<MigrationRule>> cache = new ConcurrentHashMap<>();
 
     public RuleEngine(List<RuleLoader> loaders) {
-        this.loaders = loaders;
-        // 按优先级排序
+        this.loaders = new java.util.ArrayList<>(loaders);
         this.loaders.sort((a, b) -> Integer.compare(a.getPriority(), b.getPriority()));
         log.info("RuleEngine initialized with {} loader(s)", loaders.size());
     }

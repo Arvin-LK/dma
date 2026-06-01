@@ -1,0 +1,12 @@
+SELECT IFNULL(name, 'N/A') FROM users;
+SELECT NOW() FROM dual;
+SELECT GROUP_CONCAT(name SEPARATOR ',') FROM users;
+SELECT DATE_FORMAT(created_at, '%Y-%m-%d') FROM orders;
+SELECT UNIX_TIMESTAMP(created_at) FROM orders;
+SELECT CONCAT_WS('-', first_name, last_name) FROM users;
+SELECT * FROM t WHERE FIND_IN_SET('a', tags);
+SELECT STR_TO_DATE('2024-01-01', '%Y-%m-%d');
+INSERT INTO t (id) VALUES (UUID());
+SELECT LAST_INSERT_ID();
+SELECT SLEEP(1);
+SELECT * FROM t WHERE name REGEXP '^A';
