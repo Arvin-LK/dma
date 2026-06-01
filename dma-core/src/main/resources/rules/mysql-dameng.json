@@ -1,0 +1,200 @@
+{
+  "meta": {
+    "sourceDb": "MYSQL",
+    "targetDb": "DAMENG",
+    "version": "1.0.0",
+    "description": "MySQL 到达梦 DM8 迁移兼容性规则集",
+    "author": "DMA Team"
+  },
+  "rules": [
+    {
+      "code": "M2DM-FN-001", "name": "IFNULL → NVL/COALESCE", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "IFNULL(${expr1}, ${expr2})", "replacementPattern": "NVL(${expr1}, ${expr2})",
+      "description": "MySQL IFNULL 替换为达梦 NVL 或 COALESCE",
+      "exampleSqlSource": "SELECT IFNULL(name, 'N/A') FROM users;", "exampleSqlTarget": "SELECT NVL(name, 'N/A') FROM users;"
+    },
+    {
+      "code": "M2DM-FN-002", "name": "NOW() → SYSDATE", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "NOW()", "replacementPattern": "SYSDATE",
+      "description": "MySQL NOW() 替换为达梦 SYSDATE",
+      "exampleSqlSource": "SELECT NOW();", "exampleSqlTarget": "SELECT SYSDATE;"
+    },
+    {
+      "code": "M2DM-FN-003", "name": "GROUP_CONCAT → WM_CONCAT/LISTAGG", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "GROUP_CONCAT(${expr})", "replacementPattern": "WM_CONCAT(${expr})",
+      "description": "MySQL GROUP_CONCAT 替换为达梦 WM_CONCAT 或 LISTAGG",
+      "exampleSqlSource": "SELECT GROUP_CONCAT(name) FROM users;", "exampleSqlTarget": "SELECT WM_CONCAT(name) FROM users;"
+    },
+    {
+      "code": "M2DM-FN-004", "name": "DATE_FORMAT → TO_CHAR", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "DATE_FORMAT(${date}, ${format})", "replacementPattern": "TO_CHAR(${date}, ${format})",
+      "description": "MySQL DATE_FORMAT 替换为达梦 TO_CHAR，格式字符串差异需调整",
+      "exampleSqlSource": "SELECT DATE_FORMAT(created_at, '%Y-%m-%d') FROM orders;", "exampleSqlTarget": "SELECT TO_CHAR(created_at, 'YYYY-MM-DD') FROM orders;"
+    },
+    {
+      "code": "M2DM-FN-005", "name": "UNIX_TIMESTAMP → EXTRACT", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "UNIX_TIMESTAMP(${expr})", "replacementPattern": "EXTRACT(EPOCH FROM ${expr})",
+      "description": "MySQL UNIX_TIMESTAMP 替换为达梦 EXTRACT 或自定义计算",
+      "exampleSqlSource": "SELECT UNIX_TIMESTAMP(created_at) FROM orders;", "exampleSqlTarget": "SELECT EXTRACT(EPOCH FROM created_at) FROM orders;"
+    },
+    {
+      "code": "M2DM-FN-006", "name": "UUID → GUID", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "UUID()", "replacementPattern": "GUID()",
+      "description": "MySQL UUID() 替换为达梦 GUID()",
+      "exampleSqlSource": "INSERT INTO t (id) VALUES (UUID());", "exampleSqlTarget": "INSERT INTO t (id) VALUES (GUID());"
+    },
+    {
+      "code": "M2DM-FN-007", "name": "FIND_IN_SET → 自定义分析", "category": "BUILTIN_FUNCTION", "severity": "ERROR", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "FIND_IN_SET(${str}, ${list})", "replacementPattern": "",
+      "description": "MySQL FIND_IN_SET 达梦无直接等价函数，需用 INSTR 或自定义函数替代",
+      "exampleSqlSource": "SELECT * FROM t WHERE FIND_IN_SET('a', tags);", "exampleSqlTarget": "SELECT * FROM t WHERE INSTR(tags, 'a') > 0;"
+    },
+    {
+      "code": "M2DM-FN-008", "name": "CONCAT（多参数→双参数）", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "CONCAT(${a}, ${b}, ${c})", "replacementPattern": "CONCAT(CONCAT(${a}, ${b}), ${c})",
+      "description": "达梦 CONCAT 仅支持两个参数，多参数需嵌套调用",
+      "exampleSqlSource": "SELECT CONCAT(a, b, c) FROM t;", "exampleSqlTarget": "SELECT CONCAT(CONCAT(a, b), c) FROM t;"
+    },
+    {
+      "code": "M2DM-FN-009", "name": "STR_TO_DATE → TO_DATE", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "STR_TO_DATE(${str}, ${fmt})", "replacementPattern": "TO_DATE(${str}, ${fmt})",
+      "description": "MySQL STR_TO_DATE 替换为达梦 TO_DATE",
+      "exampleSqlSource": "SELECT STR_TO_DATE('2024-01-01', '%Y-%m-%d');", "exampleSqlTarget": "SELECT TO_DATE('2024-01-01', 'YYYY-MM-DD');"
+    },
+    {
+      "code": "M2DM-FN-010", "name": "REGEXP → REGEXP_LIKE", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "${col} REGEXP ${pattern}", "replacementPattern": "REGEXP_LIKE(${col}, ${pattern})",
+      "description": "MySQL col REGEXP pattern 替换为达梦 REGEXP_LIKE",
+      "exampleSqlSource": "SELECT * FROM t WHERE name REGEXP '^A';", "exampleSqlTarget": "SELECT * FROM t WHERE REGEXP_LIKE(name, '^A');"
+    },
+    {
+      "code": "M2DM-FN-011", "name": "LAST_INSERT_ID → IDENTITY相关", "category": "BUILTIN_FUNCTION", "severity": "ERROR", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "LAST_INSERT_ID()", "replacementPattern": "",
+      "description": "MySQL LAST_INSERT_ID 达梦使用 IDENTITY 列和 @@IDENTITY 替代",
+      "exampleSqlSource": "SELECT LAST_INSERT_ID();", "exampleSqlTarget": "SELECT @@IDENTITY;"
+    },
+    {
+      "code": "M2DM-FN-012", "name": "SLEEP → DBMS_LOCK.SLEEP", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "SLEEP(${n})", "replacementPattern": "DBMS_LOCK.SLEEP(${n})",
+      "description": "MySQL SLEEP 替换为达梦 DBMS_LOCK.SLEEP（Oracle 兼容包）",
+      "exampleSqlSource": "SELECT SLEEP(1);", "exampleSqlTarget": "CALL DBMS_LOCK.SLEEP(1);"
+    },
+    {
+      "code": "M2DM-SYN-001", "name": "LIMIT m,n → LIMIT n OFFSET m", "category": "SYNTAX", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "LIMIT ${offset}, ${count}", "replacementPattern": "LIMIT ${count} OFFSET ${offset}",
+      "description": "MySQL LIMIT offset,count 需转换为达梦 LIMIT count OFFSET offset",
+      "exampleSqlSource": "SELECT * FROM users LIMIT 10, 20;", "exampleSqlTarget": "SELECT * FROM users LIMIT 20 OFFSET 10;"
+    },
+    {
+      "code": "M2DM-SYN-002", "name": "反引号 → 双引号/移除", "category": "SYNTAX", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "`", "replacementPattern": "\"",
+      "description": "MySQL 反引号在达梦中需替换为双引号或在非关键字场景下移除",
+      "exampleSqlSource": "SELECT `id`, `name` FROM `users`;", "exampleSqlTarget": "SELECT \"id\", \"name\" FROM \"users\";"
+    },
+    {
+      "code": "M2DM-SYN-003", "name": "AUTO_INCREMENT → IDENTITY", "category": "SYNTAX", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "AUTO_INCREMENT", "replacementPattern": "IDENTITY(1,1)",
+      "description": "MySQL AUTO_INCREMENT 替换为达梦 IDENTITY(起始值, 增量)",
+      "exampleSqlSource": "CREATE TABLE t (id INT AUTO_INCREMENT PRIMARY KEY);", "exampleSqlTarget": "CREATE TABLE t (id INT IDENTITY(1,1) PRIMARY KEY);"
+    },
+    {
+      "code": "M2DM-SYN-004", "name": "ENGINE → 移除", "category": "SYNTAX", "severity": "INFO", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "ENGINE=${engine}", "replacementPattern": "",
+      "description": "MySQL ENGINE 子句在达梦中不存在（默认存储引擎），需移除",
+      "exampleSqlSource": "CREATE TABLE t (id INT) ENGINE=InnoDB;", "exampleSqlTarget": "CREATE TABLE t (id INT);"
+    },
+    {
+      "code": "M2DM-SYN-005", "name": "REPLACE INTO → MERGE INTO", "category": "SYNTAX", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "REPLACE INTO", "replacementPattern": "MERGE INTO",
+      "description": "MySQL REPLACE INTO 替换为达梦 MERGE INTO 语法",
+      "exampleSqlSource": "REPLACE INTO users (id,name) VALUES (1,'Alice');", "exampleSqlTarget": "MERGE INTO users USING dual ON (id=1) WHEN MATCHED THEN UPDATE SET name='Alice' WHEN NOT MATCHED THEN INSERT (id,name) VALUES (1,'Alice');"
+    },
+    {
+      "code": "M2DM-SYN-006", "name": "SHOW TABLES → 系统表查询", "category": "SYNTAX", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "SHOW TABLES", "replacementPattern": "SELECT table_name FROM user_tables",
+      "description": "MySQL SHOW TABLES 替换为达梦系统表查询",
+      "exampleSqlSource": "SHOW TABLES;", "exampleSqlTarget": "SELECT table_name FROM user_tables;"
+    },
+    {
+      "code": "M2DM-DT-001", "name": "DATETIME → TIMESTAMP", "category": "DATATYPE", "severity": "WARNING", "patternType": "DATATYPE",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "DATETIME", "replacementPattern": "TIMESTAMP",
+      "description": "MySQL DATETIME 映射为达梦 TIMESTAMP",
+      "exampleSqlSource": "CREATE TABLE t (created_at DATETIME);", "exampleSqlTarget": "CREATE TABLE t (created_at TIMESTAMP);"
+    },
+    {
+      "code": "M2DM-DT-002", "name": "TINYINT → SMALLINT", "category": "DATATYPE", "severity": "WARNING", "patternType": "DATATYPE",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "TINYINT", "replacementPattern": "SMALLINT",
+      "description": "MySQL TINYINT 映射为达梦 SMALLINT",
+      "exampleSqlSource": "CREATE TABLE t (flag TINYINT);", "exampleSqlTarget": "CREATE TABLE t (flag SMALLINT);"
+    },
+    {
+      "code": "M2DM-DT-003", "name": "MEDIUMTEXT → TEXT/CLOB", "category": "DATATYPE", "severity": "WARNING", "patternType": "DATATYPE",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "MEDIUMTEXT", "replacementPattern": "CLOB",
+      "description": "MySQL MEDIUMTEXT 映射为达梦 CLOB（达梦 TEXT 最大 2GB，一般够用）",
+      "exampleSqlSource": "CREATE TABLE t (content MEDIUMTEXT);", "exampleSqlTarget": "CREATE TABLE t (content CLOB);"
+    },
+    {
+      "code": "M2DM-DT-004", "name": "BLOB → BLOB", "category": "DATATYPE", "severity": "INFO", "patternType": "DATATYPE",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "BLOB", "replacementPattern": "BLOB",
+      "description": "MySQL BLOB 在达梦中直接兼容",
+      "exampleSqlSource": "CREATE TABLE t (data BLOB);", "exampleSqlTarget": "CREATE TABLE t (data BLOB);"
+    },
+    {
+      "code": "M2DM-DDL-001", "name": "TEMPORARY TABLE → GLOBAL TEMP", "category": "DDL", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "CREATE TEMPORARY TABLE", "replacementPattern": "CREATE GLOBAL TEMPORARY TABLE",
+      "description": "MySQL 临时表语法替换为达梦全局临时表",
+      "exampleSqlSource": "CREATE TEMPORARY TABLE tmp (id INT);", "exampleSqlTarget": "CREATE GLOBAL TEMPORARY TABLE tmp (id INT);"
+    },
+    {
+      "code": "M2DM-DDL-002", "name": "ALTER MODIFY → ALTER MODIFY", "category": "DDL", "severity": "INFO", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "ALTER TABLE ${table} MODIFY COLUMN", "replacementPattern": "ALTER TABLE ${table} MODIFY",
+      "description": "达梦 ALTER MODIFY 语法与 MySQL 类似，去除 COLUMN 关键字",
+      "exampleSqlSource": "ALTER TABLE users MODIFY COLUMN name VARCHAR(100);", "exampleSqlTarget": "ALTER TABLE users MODIFY name VARCHAR(100);"
+    },
+    {
+      "code": "M2DM-DDL-003", "name": "CREATE DATABASE 语法差异", "category": "DDL", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "CREATE DATABASE ${name} CHARACTER SET ${charset}", "replacementPattern": "CREATE DATABASE ${name}",
+      "description": "MySQL CREATE DATABASE 达梦不支持 CHARACTER SET 子句，需移除",
+      "exampleSqlSource": "CREATE DATABASE mydb CHARACTER SET utf8mb4;", "exampleSqlTarget": "CREATE DATABASE mydb;"
+    },
+    {
+      "code": "M2DM-OTH-001", "name": "USE database → SET SCHEMA", "category": "OTHER", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "USE ${db}", "replacementPattern": "SET SCHEMA ${db}",
+      "description": "MySQL USE database 替换为达梦 SET SCHEMA",
+      "exampleSqlSource": "USE mydb;", "exampleSqlTarget": "SET SCHEMA mydb;"
+    },
+    {
+      "code": "M2DM-OTH-002", "name": "MySQL 注释语法（#）", "category": "OTHER", "severity": "INFO", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "DAMENG",
+      "matchPattern": "#", "replacementPattern": "--",
+      "description": "MySQL # 注释在达梦中不支持，需替换为 --",
+      "exampleSqlSource": "SELECT * FROM users; # 这是注释", "exampleSqlTarget": "SELECT * FROM users; -- 这是注释"
+    }
+  ]
+}

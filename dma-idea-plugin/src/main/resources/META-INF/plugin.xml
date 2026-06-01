@@ -1,0 +1,21 @@
+<idea-plugin>
+    <id>com.dma.idea</id>
+    <name>Database Migration Assistant</name>
+    <vendor>DMA Team</vendor>
+    <description>
+        数据库迁移与兼容性分析工具。
+        支持 SQL 实时检测、代码高亮提示、Alt+Enter 自动修复、项目一键扫描。
+    </description>
+
+    <!-- 后续 Phase 实现 -->
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.java</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- TODO: Phase 3+ 注册 Inspection 和 Intention -->
+    </extensions>
+
+    <actions>
+        <!-- TODO: Phase 3+ 注册项目扫描 Action -->
+    </actions>
+</idea-plugin>

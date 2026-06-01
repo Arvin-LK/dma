@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.dma</groupId>
+        <artifactId>dma</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>dma-idea-plugin</artifactId>
+    <name>DMA IDEA Plugin</name>
+    <description>IntelliJ IDEA 插件 — 占位骨架，后续用 Gradle 实现</description>
+
+    <!--
+        注意：IDEA 插件开发通常需要使用 Gradle + IntelliJ Platform SDK。
+        当前模块仅作为 Maven 占位，实际插件开发将在后续 Phase 用 Gradle 构建。
+    -->
+
+    <dependencies>
+        <dependency>
+            <groupId>com.dma</groupId>
+            <artifactId>dma-core</artifactId>
+        </dependency>
+    </dependencies>
+</project>

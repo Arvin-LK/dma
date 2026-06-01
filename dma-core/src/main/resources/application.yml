@@ -1,0 +1,34 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: dma
+  thymeleaf:
+    prefix: classpath:/templates/
+    suffix: .html
+    mode: HTML
+    encoding: UTF-8
+
+# DMA 配置
+dma:
+  # 数据库文件路径
+  database-path: ${user.home}/.dma/dma.db
+  # 规则加载顺序: json_first (MVP), sqlite_only (后续)
+  rule-source: json_file
+  # 自定义规则目录（用户可在此放置自定义 JSON 规则）
+  custom-rule-dir: ${user.home}/.dma/rules
+  # AI 配置（预留）
+  ai:
+    provider: noop
+    api-key: ""
+    model: ""
+  # License 配置（预留）
+  license:
+    enabled: false
+
+# 日志
+logging:
+  level:
+    com.dma: DEBUG
+    org.springframework: WARN

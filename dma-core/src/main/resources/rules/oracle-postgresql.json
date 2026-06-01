@@ -1,0 +1,186 @@
+{
+  "meta": {
+    "sourceDb": "ORACLE",
+    "targetDb": "POSTGRESQL",
+    "version": "1.0.0",
+    "description": "Oracle 到 PostgreSQL 迁移兼容性规则集",
+    "author": "DMA Team"
+  },
+  "rules": [
+    {
+      "code": "O2PG-FN-001", "name": "NVL → COALESCE", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "NVL(${expr1}, ${expr2})", "replacementPattern": "COALESCE(${expr1}, ${expr2})",
+      "description": "Oracle NVL 函数需替换为 PG COALESCE",
+      "exampleSqlSource": "SELECT NVL(name, 'N/A') FROM users;", "exampleSqlTarget": "SELECT COALESCE(name, 'N/A') FROM users;"
+    },
+    {
+      "code": "O2PG-FN-002", "name": "NVL2 → CASE WHEN", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "NVL2(${expr}, ${notNull}, ${isNull})", "replacementPattern": "CASE WHEN ${expr} IS NOT NULL THEN ${notNull} ELSE ${isNull} END",
+      "description": "Oracle NVL2 需替换为 PG CASE WHEN 表达式",
+      "exampleSqlSource": "SELECT NVL2(name, 'HasName', 'NoName') FROM users;", "exampleSqlTarget": "SELECT CASE WHEN name IS NOT NULL THEN 'HasName' ELSE 'NoName' END FROM users;"
+    },
+    {
+      "code": "O2PG-FN-003", "name": "DECODE → CASE WHEN", "category": "BUILTIN_FUNCTION", "severity": "ERROR", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "DECODE(${expr}, ${search}, ${result})", "replacementPattern": "CASE ${expr} WHEN ${search} THEN ${result} END",
+      "description": "Oracle DECODE 需替换为 PG CASE WHEN，多值映射需人工调整",
+      "exampleSqlSource": "SELECT DECODE(status, 1, 'Active', 0, 'Inactive') FROM users;", "exampleSqlTarget": "SELECT CASE status WHEN 1 THEN 'Active' WHEN 0 THEN 'Inactive' END FROM users;"
+    },
+    {
+      "code": "O2PG-FN-004", "name": "SYSDATE → CURRENT_TIMESTAMP", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "SYSDATE", "replacementPattern": "CURRENT_TIMESTAMP",
+      "description": "Oracle SYSDATE 替换为 PG CURRENT_TIMESTAMP",
+      "exampleSqlSource": "SELECT SYSDATE FROM dual;", "exampleSqlTarget": "SELECT CURRENT_TIMESTAMP;"
+    },
+    {
+      "code": "O2PG-FN-005", "name": "TO_DATE → TO_DATE", "category": "BUILTIN_FUNCTION", "severity": "INFO", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "TO_DATE(${str}, ${fmt})", "replacementPattern": "TO_DATE(${str}, ${fmt})",
+      "description": "Oracle TO_DATE 在 PG 中语法相似，格式字符串有差异需调整",
+      "exampleSqlSource": "SELECT TO_DATE('2024-01-01', 'YYYY-MM-DD') FROM dual;", "exampleSqlTarget": "SELECT TO_DATE('2024-01-01', 'YYYY-MM-DD');"
+    },
+    {
+      "code": "O2PG-FN-006", "name": "TO_CHAR(日期) → TO_CHAR", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "TO_CHAR(${date}, ${fmt})", "replacementPattern": "TO_CHAR(${date}, ${fmt})",
+      "description": "Oracle TO_CHAR 格式化日期在 PG 中兼容，格式模板有差异",
+      "exampleSqlSource": "SELECT TO_CHAR(SYSDATE, 'YYYY-MM-DD') FROM dual;", "exampleSqlTarget": "SELECT TO_CHAR(CURRENT_TIMESTAMP, 'YYYY-MM-DD');"
+    },
+    {
+      "code": "O2PG-FN-007", "name": "TO_NUMBER → CAST", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "TO_NUMBER(${expr})", "replacementPattern": "CAST(${expr} AS NUMERIC)",
+      "description": "Oracle TO_NUMBER 替换为 PG CAST AS NUMERIC",
+      "exampleSqlSource": "SELECT TO_NUMBER('123') FROM dual;", "exampleSqlTarget": "SELECT CAST('123' AS NUMERIC);"
+    },
+    {
+      "code": "O2PG-FN-008", "name": "SUBSTR → SUBSTRING", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "SUBSTR(${str}, ${start}, ${len})", "replacementPattern": "SUBSTRING(${str} FROM ${start} FOR ${len})",
+      "description": "Oracle SUBSTR 替换为 PG SUBSTRING FROM FOR 语法",
+      "exampleSqlSource": "SELECT SUBSTR(name, 1, 5) FROM users;", "exampleSqlTarget": "SELECT SUBSTRING(name FROM 1 FOR 5) FROM users;"
+    },
+    {
+      "code": "O2PG-FN-009", "name": "INSTR → POSITION", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "INSTR(${str}, ${substr})", "replacementPattern": "POSITION(${substr} IN ${str})",
+      "description": "Oracle INSTR 替换为 PG POSITION",
+      "exampleSqlSource": "SELECT INSTR(name, 'a') FROM users;", "exampleSqlTarget": "SELECT POSITION('a' IN name) FROM users;"
+    },
+    {
+      "code": "O2PG-FN-010", "name": "LENGTH → LENGTH", "category": "BUILTIN_FUNCTION", "severity": "INFO", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "LENGTH(${str})", "replacementPattern": "LENGTH(${str})",
+      "description": "Oracle LENGTH 在 PG 中直接兼容",
+      "exampleSqlSource": "SELECT LENGTH(name) FROM users;", "exampleSqlTarget": "SELECT LENGTH(name) FROM users;"
+    },
+    {
+      "code": "O2PG-FN-011", "name": "TRUNC(日期) → DATE_TRUNC", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "TRUNC(${date}, ${unit})", "replacementPattern": "DATE_TRUNC(${unit}, ${date})",
+      "description": "Oracle TRUNC 截断日期替换为 PG DATE_TRUNC",
+      "exampleSqlSource": "SELECT TRUNC(SYSDATE, 'MON') FROM dual;", "exampleSqlTarget": "SELECT DATE_TRUNC('month', CURRENT_TIMESTAMP);"
+    },
+    {
+      "code": "O2PG-FN-012", "name": "ROWNUM → ROW_NUMBER()", "category": "BUILTIN_FUNCTION", "severity": "ERROR", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "ROWNUM", "replacementPattern": "ROW_NUMBER() OVER()",
+      "description": "Oracle ROWNUM 伪列替换为 PG 窗口函数 ROW_NUMBER() OVER()",
+      "exampleSqlSource": "SELECT * FROM users WHERE ROWNUM <= 10;", "exampleSqlTarget": "SELECT * FROM users LIMIT 10;"
+    },
+    {
+      "code": "O2PG-SYN-001", "name": "DUAL 表移除", "category": "SYNTAX", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "FROM dual", "replacementPattern": "",
+      "description": "Oracle SELECT FROM dual 在 PG 中可省略 FROM 子句",
+      "exampleSqlSource": "SELECT SYSDATE FROM dual;", "exampleSqlTarget": "SELECT CURRENT_TIMESTAMP;"
+    },
+    {
+      "code": "O2PG-SYN-002", "name": "SEQUENCE.NEXTVAL → nextval", "category": "SYNTAX", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "${seq}.NEXTVAL", "replacementPattern": "nextval('${seq}')",
+      "description": "Oracle seq.NEXTVAL 替换为 PG nextval('seq')",
+      "exampleSqlSource": "SELECT my_seq.NEXTVAL FROM dual;", "exampleSqlTarget": "SELECT nextval('my_seq');"
+    },
+    {
+      "code": "O2PG-SYN-003", "name": "外连接语法 → LEFT/RIGHT JOIN", "category": "SYNTAX", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "(+)", "replacementPattern": "",
+      "description": "Oracle (+) 外连接语法需替换为标准 LEFT/RIGHT JOIN",
+      "exampleSqlSource": "SELECT * FROM a, b WHERE a.id = b.id(+);", "exampleSqlTarget": "SELECT * FROM a LEFT JOIN b ON a.id = b.id;"
+    },
+    {
+      "code": "O2PG-SYN-004", "name": "MERGE INTO → INSERT ON CONFLICT", "category": "SYNTAX", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "MERGE INTO", "replacementPattern": "INSERT INTO ... ON CONFLICT DO UPDATE",
+      "description": "Oracle MERGE INTO 替换为 PG INSERT ON CONFLICT (PG 15+ 支持 MERGE)",
+      "exampleSqlSource": "MERGE INTO t USING s ON (t.id=s.id) WHEN MATCHED THEN UPDATE SET ...;", "exampleSqlTarget": "INSERT INTO t SELECT * FROM s ON CONFLICT (id) DO UPDATE SET ...;"
+    },
+    {
+      "code": "O2PG-DT-001", "name": "VARCHAR2 → VARCHAR", "category": "DATATYPE", "severity": "WARNING", "patternType": "DATATYPE",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "VARCHAR2", "replacementPattern": "VARCHAR",
+      "description": "Oracle VARCHAR2 替换为 PG VARCHAR",
+      "exampleSqlSource": "CREATE TABLE t (name VARCHAR2(100));", "exampleSqlTarget": "CREATE TABLE t (name VARCHAR(100));"
+    },
+    {
+      "code": "O2PG-DT-002", "name": "NUMBER → NUMERIC", "category": "DATATYPE", "severity": "WARNING", "patternType": "DATATYPE",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "NUMBER", "replacementPattern": "NUMERIC",
+      "description": "Oracle NUMBER 替换为 PG NUMERIC",
+      "exampleSqlSource": "CREATE TABLE t (amount NUMBER(10,2));", "exampleSqlTarget": "CREATE TABLE t (amount NUMERIC(10,2));"
+    },
+    {
+      "code": "O2PG-DT-003", "name": "CLOB → TEXT", "category": "DATATYPE", "severity": "WARNING", "patternType": "DATATYPE",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "CLOB", "replacementPattern": "TEXT",
+      "description": "Oracle CLOB 替换为 PG TEXT",
+      "exampleSqlSource": "CREATE TABLE t (content CLOB);", "exampleSqlTarget": "CREATE TABLE t (content TEXT);"
+    },
+    {
+      "code": "O2PG-DT-004", "name": "DATE(含时间) → TIMESTAMP", "category": "DATATYPE", "severity": "WARNING", "patternType": "DATATYPE",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "CREATE TABLE ${name} (${col} DATE)", "replacementPattern": "CREATE TABLE ${name} (${col} TIMESTAMP)",
+      "description": "Oracle DATE 含时间信息，PG 中对应 TIMESTAMP（仅日期用 DATE）",
+      "exampleSqlSource": "CREATE TABLE t (created DATE);", "exampleSqlTarget": "CREATE TABLE t (created TIMESTAMP);"
+    },
+    {
+      "code": "O2PG-DDL-001", "name": "CREATE SEQUENCE 语法差异", "category": "DDL", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "NOCACHE", "replacementPattern": "CACHE 1",
+      "description": "Oracle NOCACHE 在 PG 序列中对应 CACHE 1",
+      "exampleSqlSource": "CREATE SEQUENCE seq NOCACHE;", "exampleSqlTarget": "CREATE SEQUENCE seq CACHE 1;"
+    },
+    {
+      "code": "O2PG-DDL-002", "name": "闪回查询(FB) → 不支持", "category": "DDL", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "AS OF TIMESTAMP", "replacementPattern": "",
+      "description": "Oracle 闪回查询 PG 不支持，需用时间旅行扩展或逻辑备份替代",
+      "exampleSqlSource": "SELECT * FROM t AS OF TIMESTAMP SYSDATE-1;", "exampleSqlTarget": "-- PG 不支持闪回查询，需考虑 pg_squeeze 或其他方案"
+    },
+    {
+      "code": "O2PG-OTH-001", "name": "Hint 注释移除", "category": "OTHER", "severity": "INFO", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "/*+", "replacementPattern": "/*",
+      "description": "Oracle 优化器 Hint 在 PG 中无效，需移除或替换为 PG 等价配置",
+      "exampleSqlSource": "SELECT /*+ INDEX(t idx_name) */ * FROM t;", "exampleSqlTarget": "SELECT /* INDEX(t idx_name) */ * FROM t;"
+    },
+    {
+      "code": "O2PG-OTH-002", "name": "CONNECT BY → RECURSIVE CTE", "category": "OTHER", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "CONNECT BY", "replacementPattern": "",
+      "description": "Oracle CONNECT BY 层级查询需替换为 PG WITH RECURSIVE CTE",
+      "exampleSqlSource": "SELECT * FROM t CONNECT BY PRIOR id = parent_id;", "exampleSqlTarget": "WITH RECURSIVE cte AS (SELECT * FROM t WHERE parent_id IS NULL UNION ALL SELECT t.* FROM t JOIN cte ON t.parent_id = cte.id) SELECT * FROM cte;"
+    },
+    {
+      "code": "O2PG-OTH-003", "name": "存储过程返回游标 → REFCURSOR", "category": "OTHER", "severity": "ERROR", "patternType": "KEYWORD",
+      "sourceDbType": "ORACLE", "targetDbType": "POSTGRESQL",
+      "matchPattern": "SYS_REFCURSOR", "replacementPattern": "REFCURSOR",
+      "description": "Oracle SYS_REFCURSOR 替换为 PG REFCURSOR",
+      "exampleSqlSource": "CREATE PROCEDURE p (out_cur OUT SYS_REFCURSOR) IS BEGIN ... END;", "exampleSqlTarget": "CREATE FUNCTION p() RETURNS SETOF REFCURSOR AS $$ ... $$ LANGUAGE plpgsql;"
+    }
+  ]
+}
