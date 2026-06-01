@@ -432,12 +432,137 @@ public class DmaDesktopApplication extends Application {
                 String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
                 Platform.runLater(() -> {
                     sqlStatusLabel.setText("完成");
-                    sqlResult.setText(resp.replace("},{", "},\n{"));
+                    sqlResult.setText(formatSqlConvertResult(resp, sql));
                 });
             } catch (Exception e) {
                 Platform.runLater(() -> sqlStatusLabel.setText("失败: " + e.getMessage()));
             }
         }).start();
+    }
+
+    // ==================== 格式化 SQL 转换结果 ====================
+
+    private String formatSqlConvertResult(String json, String originalSql) {
+        StringBuilder sb = new StringBuilder();
+        String source = sqlSourceCombo.getValue();
+        String target = sqlTargetCombo.getValue();
+
+        sb.append("╔══════════════════════════════════════════════╗\n");
+        sb.append(String.format("║  %s  →  %s                               ║\n",
+                padRight(source, 10), padRight(target, 12)));
+        sb.append("╚══════════════════════════════════════════════╝\n\n");
+
+        // 提取 data 数组
+        String dataSection = json;
+        int dataIdx = json.indexOf("\"data\":");
+        if (dataIdx >= 0) {
+            dataSection = json.substring(dataIdx + 7);
+        }
+
+        // 解析每条结果
+        Pattern itemPattern = Pattern.compile(
+                "\\{[^}]*\"ruleCode\"\\s*:\\s*\"([^\"]*)\"[^}]*" +
+                "\"ruleName\"\\s*:\\s*\"([^\"]*)\"[^}]*" +
+                "\"severity\"\\s*:\\s*\"([^\"]*)\"[^}]*" +
+                "\"compatibilityLevel\"\\s*:\\s*\"([^\"]*)\"[^}]*" +
+                "\"sourceSql\"\\s*:\\s*\"([^\"]*)\"[^}]*" +
+                "(?:\"suggestedSql\"\\s*:\\s*\"([^\"]*)\"[^}]*)?"
+        );
+
+        // 更简单的解析方式：逐个提取字段
+        Pattern codePat = Pattern.compile("\"ruleCode\"\\s*:\\s*\"([^\"]+)\"");
+        Pattern namePat = Pattern.compile("\"ruleName\"\\s*:\\s*\"([^\"]+)\"");
+        Pattern sevPat = Pattern.compile("\"severity\"\\s*:\\s*\"([^\"]+)\"");
+        Pattern levelPat = Pattern.compile("\"compatibilityLevel\"\\s*:\\s*\"([^\"]+)\"");
+        Pattern msgPat = Pattern.compile("\"message\"\\s*:\\s*\"([^\"]+)\"");
+        Pattern sugPat = Pattern.compile("\"suggestedSql\"\\s*:\\s*\"([^\"]+)\"");
+
+        // 按每个结果对象分割
+        String[] parts = dataSection.split("\\},\\s*\\{");
+        if (parts.length == 0) parts = new String[]{dataSection};
+
+        int issueNum = 0;
+        boolean foundIssues = false;
+
+        for (String part : parts) {
+            Matcher codeM = codePat.matcher(part);
+            Matcher nameM = namePat.matcher(part);
+            Matcher sevM = sevPat.matcher(part);
+            Matcher levelM = levelPat.matcher(part);
+            Matcher msgM = msgPat.matcher(part);
+            Matcher sugM = sugPat.matcher(part);
+
+            if (!codeM.find()) continue;
+            foundIssues = true;
+            issueNum++;
+
+            String ruleCode = codeM.group(1);
+            String ruleName = nameM.find() ? nameM.group(1) : ruleCode;
+            String severity = sevM.find() ? sevM.group(1) : "INFO";
+            String level = levelM.find() ? levelM.group(1) : "";
+            String message = msgM.find() ? msgM.group(1) : "";
+            String suggestedSql = sugM.find() ? sugM.group(1).replace("\\\"", "\"") : null;
+
+            // 严重程度标记
+            String sevIcon = switch (severity) {
+                case "ERROR" -> "✗ ERROR";
+                case "WARNING" -> "⚠ WARNING";
+                default -> "ℹ INFO";
+            };
+
+            // 兼容性级别中文
+            String levelCN = switch (level) {
+                case "AUTO_CONVERTIBLE" -> "可自动转换";
+                case "MANUAL_REVIEW" -> "需人工审核";
+                case "INCOMPATIBLE" -> "不兼容";
+                case "COMPATIBLE" -> "完全兼容";
+                default -> level;
+            };
+
+            sb.append("┌──────────────────────────────────────────┐\n");
+            sb.append(String.format("│ 【%d】 %s\n", issueNum, ruleName));
+            sb.append(String.format("│ 规则: %s | %s | %s\n", ruleCode, sevIcon, levelCN));
+            sb.append("└──────────────────────────────────────────┘\n\n");
+
+            // 原始 SQL
+            sb.append("  ── 原 SQL ──\n");
+            String displaySql = originalSql.length() < 500 ? originalSql : originalSql.substring(0, 500) + "...";
+            sb.append("  ").append(displaySql).append("\n\n");
+
+            // 转换后 SQL
+            if (suggestedSql != null && !suggestedSql.isEmpty()) {
+                sb.append("     ↓↓↓ 转换后 ↓↓↓\n\n");
+                sb.append("  ").append(suggestedSql).append("\n\n");
+            } else {
+                sb.append("     ↓↓↓ 无法自动转换，需人工处理 ↓↓↓\n\n");
+            }
+
+            // 说明
+            if (!message.isEmpty()) {
+                sb.append("  ── 兼容性说明 ──\n");
+                sb.append("  ").append(message).append("\n\n");
+            }
+
+            sb.append("─".repeat(42)).append("\n\n");
+        }
+
+        if (!foundIssues) {
+            sb.append("  ✓ 未发现兼容性问题！\n\n");
+            sb.append("  该 SQL 在目标数据库中完全兼容，无需修改。\n");
+        }
+
+        // 汇总
+        sb.append("══════════════════════════════════════════════\n");
+        sb.append(String.format("  扫描完成: 发现 %d 个兼容性问题\n", issueNum));
+        sb.append(String.format("  源: %s → 目标: %s\n", source, target));
+        sb.append("══════════════════════════════════════════════\n");
+
+        return sb.toString();
+    }
+
+    private String padRight(String s, int len) {
+        if (s.length() >= len) return s;
+        return s + " ".repeat(len - s.length());
     }
 
     // ==================== 工具方法 ====================
