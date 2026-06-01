@@ -46,6 +46,12 @@ public class DmaDesktopApplication extends Application {
     private ComboBox<String> sqlSourceCombo, sqlTargetCombo;
     private Label sqlStatusLabel;
 
+    // === 存储过程迁移页组件 ===
+    private TextArea spInput;
+    private TextArea spResult;
+    private ComboBox<String> spSourceCombo, spTargetCombo;
+    private Label spStatusLabel;
+
     public static void main(String[] args) {
         launch(args);
     }
@@ -72,8 +78,12 @@ public class DmaDesktopApplication extends Application {
         Tab sqlTab = new Tab("SQL 转换");
         sqlTab.setClosable(false);
         sqlTab.setContent(buildSqlConvertPage());
+        // Tab 3: 存储过程迁移
+        Tab spTab = new Tab("存储过程迁移");
+        spTab.setClosable(false);
+        spTab.setContent(buildProcedurePage());
 
-        tabPane.getTabs().addAll(dbScanTab, sqlTab);
+        tabPane.getTabs().addAll(dbScanTab, sqlTab, spTab);
         tabPane.getSelectionModel().select(0);
 
         Scene scene = new Scene(tabPane);
@@ -412,6 +422,170 @@ public class DmaDesktopApplication extends Application {
 
         root.getChildren().addAll(title, selectorRow, split);
         return root;
+    }
+
+    // ==================== 存储过程迁移页面 ====================
+
+    private VBox buildProcedurePage() {
+        VBox root = new VBox(12);
+        root.setPadding(new Insets(16));
+        root.setStyle("-fx-background-color: #f8fafc;");
+
+        Label title = new Label("存储过程迁移");
+        title.setFont(Font.font("System", FontWeight.BOLD, 22));
+        title.setTextFill(Color.valueOf("#7c3aed"));
+
+        Label subtitle = new Label("粘贴 CREATE PROCEDURE / FUNCTION / TRIGGER / VIEW，自动转换为目标数据库语法");
+        subtitle.setFont(Font.font("System", 14));
+        subtitle.setTextFill(Color.valueOf("#64748b"));
+
+        HBox selectorRow = new HBox(16);
+        selectorRow.setAlignment(Pos.CENTER_LEFT);
+        spSourceCombo = new ComboBox<>(FXCollections.observableArrayList("MYSQL", "ORACLE", "SQLSERVER"));
+        spSourceCombo.setValue("MYSQL"); spSourceCombo.setPrefWidth(140);
+        spTargetCombo = new ComboBox<>(FXCollections.observableArrayList("GAUSSDB", "POSTGRESQL", "DAMENG", "OCEANBASE", "GOLDENDB"));
+        spTargetCombo.setValue("GAUSSDB"); spTargetCombo.setPrefWidth(140);
+
+        Button convertBtn = new Button("转换");
+        convertBtn.setStyle("-fx-background-color: #7c3aed; -fx-text-fill: white; -fx-font-size: 14px; -fx-font-weight: bold; -fx-padding: 8 24;");
+        convertBtn.setOnAction(e -> runProcedureConvert());
+
+        spStatusLabel = new Label("");
+        selectorRow.getChildren().addAll(
+                new Label("源:"), spSourceCombo,
+                new Label("目标:"), spTargetCombo,
+                convertBtn, spStatusLabel
+        );
+
+        // 输入区显示模板
+        spInput = new TextArea();
+        spInput.setText("""
+            -- 粘贴 MySQL 存储过程/函数/触发器/视图 DDL
+            -- 支持: PROCEDURE, FUNCTION, TRIGGER, VIEW
+
+            DELIMITER $$
+
+            CREATE PROCEDURE test_proc(IN p_id INT, OUT p_name VARCHAR(100))
+            BEGIN
+              SELECT IFNULL(name, '') INTO p_name FROM users WHERE id = p_id;
+            END
+
+            $$""");
+        spInput.setPrefRowCount(12);
+        spInput.setStyle("-fx-font-family: 'Consolas', monospace; -fx-font-size: 13px;");
+
+        spResult = new TextArea();
+        spResult.setEditable(false);
+        spResult.setPrefRowCount(14);
+        spResult.setStyle("-fx-font-family: 'Consolas', monospace; -fx-font-size: 13px;");
+
+        SplitPane split = new SplitPane();
+        split.setOrientation(javafx.geometry.Orientation.VERTICAL);
+        split.getItems().addAll(spInput, spResult);
+        split.setDividerPosition(0, 0.42);
+        VBox.setVgrow(split, Priority.ALWAYS);
+
+        root.getChildren().addAll(title, subtitle, selectorRow, split);
+        return root;
+    }
+
+    private void runProcedureConvert() {
+        String ddl = spInput.getText().trim();
+        if (ddl.isEmpty()) return;
+
+        spStatusLabel.setText("转换中...");
+        String jsonBody = String.format("""
+            {"ddl": "%s", "sourceDbType": "%s", "targetDbType": "%s"}
+            """, escapeJson(ddl), spSourceCombo.getValue(), spTargetCombo.getValue());
+
+        new Thread(() -> {
+            try {
+                HttpRequest req = HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:8080/api/v1/convert/procedure"))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(jsonBody)).build();
+                String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
+                Platform.runLater(() -> {
+                    spStatusLabel.setText("转换完成 ✓");
+                    spResult.setText(formatProcedureResult(resp));
+                });
+            } catch (Exception e) {
+                Platform.runLater(() -> {
+                    spStatusLabel.setText("失败: " + e.getMessage());
+                    spResult.setText("错误: " + e.getMessage());
+                });
+            }
+        }).start();
+    }
+
+    private String formatProcedureResult(String json) {
+        StringBuilder sb = new StringBuilder();
+        try {
+            String body = json;
+            int dataIdx = json.indexOf("\"data\":");
+            if (dataIdx >= 0) body = json.substring(dataIdx + 6);
+
+            String objType = extractJsonValue(body, "objectType");
+            String objName = extractJsonValue(body, "objectName");
+            String original = extractJsonValue(body, "originalDdl");
+            String converted = extractJsonValue(body, "convertedDdl");
+            String srcDb = extractJsonValue(body, "sourceDbType");
+            String tgtDb = extractJsonValue(body, "targetDbType");
+            int changeCount = extractJsonInt(body, "changeCount");
+
+            // 处理 escaped 字符
+            if (original.contains("\\n")) original = original.replace("\\n", "\n").replace("\\t", "    ");
+            if (converted.contains("\\n")) converted = converted.replace("\\n", "\n").replace("\\t", "    ");
+
+            String typeName = switch (objType) {
+                case "PROCEDURE" -> "存储过程";
+                case "FUNCTION" -> "函数";
+                case "TRIGGER" -> "触发器";
+                case "VIEW" -> "视图";
+                default -> objType;
+            };
+
+            sb.append("╔══════════════════════════════════════════════╗\n");
+            sb.append(String.format("║  %s 迁移: %s  →  %s\n", typeName, srcDb, tgtDb));
+            sb.append(String.format("║  对象: %s\n", objName));
+            sb.append("╚══════════════════════════════════════════════╝\n\n");
+
+            sb.append("  ━━━ 原 DDL (").append(srcDb).append(") ━━━\n\n");
+            sb.append(original).append("\n\n");
+
+            sb.append("        ↓↓↓ 转换后 ↓↓↓\n\n");
+
+            sb.append("  ━━━ 转换后 DDL (").append(tgtDb).append(") ━━━\n\n");
+            sb.append(converted).append("\n\n");
+
+            // 变更说明
+            if (changeCount > 0) {
+                sb.append("  ━━━ 变更说明 (").append(changeCount).append("项) ━━━\n\n");
+                // Parse changes array
+                Pattern changePat = Pattern.compile("\"([^\"]+)\"");
+                String changesStr = body;
+                int changesIdx = body.indexOf("\"changes\":");
+                if (changesIdx >= 0) {
+                    changesStr = body.substring(changesIdx);
+                    Matcher cm = changePat.matcher(changesStr);
+                    int num = 1;
+                    while (cm.find()) {
+                        String change = cm.group(1);
+                        if (!change.equals("changes") && change.length() > 2) {
+                            sb.append("  ").append(num++).append(". ").append(change).append("\n");
+                        }
+                    }
+                }
+            }
+
+            sb.append("\n══════════════════════════════════════════════\n");
+            sb.append(String.format("  %s 迁移完成 | 源: %s → 目标: %s\n", typeName, srcDb, tgtDb));
+
+        } catch (Exception e) {
+            sb.append("  格式化错误: ").append(e.getMessage()).append("\n");
+            sb.append("  ").append(json);
+        }
+        return sb.toString();
     }
 
     private void runSqlScan() {
