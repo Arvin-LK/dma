@@ -82,7 +82,8 @@ jpackage ^
   --java-options "-Dspring.devtools.restart.enabled=false" ^
   --java-options "--add-opens=javafx.graphics/javafx.scene=ALL-UNNAMED" ^
   --java-options "--add-opens=javafx.controls/javafx.scene.control=ALL-UNNAMED" ^
-  --java-options "--add-opens=javafx.graphics/com.sun.javafx.application=ALL-UNNAMED"
+  --java-options "--add-opens=javafx.graphics/com.sun.javafx.application=ALL-UNNAMED" ^
+  --icon "dma-desktop\src\main\resources\icon.ico"
 
 if %ERRORLEVEL% NEQ 0 (
     echo X jpackage 生成失败！
