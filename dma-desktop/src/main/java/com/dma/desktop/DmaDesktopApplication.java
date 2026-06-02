@@ -64,6 +64,16 @@ public class DmaDesktopApplication extends Application {
 
     @Override
     public void start(Stage stage) {
+        // 设置窗口图标
+        try {
+            stage.getIcons().add(new javafx.scene.image.Image(
+                getClass().getResourceAsStream("/icon.png")));
+            stage.getIcons().add(new javafx.scene.image.Image(
+                getClass().getResourceAsStream("/icon-32.png")));
+        } catch (Exception ignored) {
+            // 图标加载失败则使用默认
+        }
+
         stage.setTitle("DMA — Database Migration Assistant");
         stage.setWidth(1280); stage.setHeight(860);
         stage.setMinWidth(1024); stage.setMinHeight(700);
@@ -92,17 +102,33 @@ public class DmaDesktopApplication extends Application {
         sidebar.setPrefWidth(220); sidebar.setMinWidth(220);
         sidebar.setStyle("-fx-background-color: #fafbfc; -fx-border-width: 0 1 0 0; -fx-border-color: #e2e5e9;");
 
-        // Logo 区 — 蓝色渐变
-        VBox logoBox = new VBox(6);
-        logoBox.setPadding(new Insets(22, 20, 18, 20));
-        logoBox.setStyle("-fx-background-color: #1a73e8;");
-        Label logoTitle = new Label("DMA");
-        logoTitle.setFont(Font.font("System", FontWeight.BOLD, 20));
-        logoTitle.setTextFill(Color.WHITE);
+        // Logo 区 — 白色背景 + Logo 图片
+        VBox logoBox = new VBox(8);
+        logoBox.setPadding(new Insets(20, 20, 18, 20));
+        logoBox.setStyle("-fx-background-color: #fafbfc;");
+        logoBox.setAlignment(Pos.CENTER);
+
+        // Logo 图片
+        javafx.scene.image.ImageView logoImg = new javafx.scene.image.ImageView();
+        try {
+            javafx.scene.image.Image img = new javafx.scene.image.Image(
+                getClass().getResourceAsStream("/icon.png"));
+            logoImg.setImage(img);
+            logoImg.setFitWidth(64);
+            logoImg.setPreserveRatio(true);
+            logoImg.setSmooth(true);
+        } catch (Exception e) {
+            // 图片加载失败，显示文字兜底
+            Label fallback = new Label("DMA");
+            fallback.setFont(Font.font("System", FontWeight.BOLD, 20));
+            fallback.setTextFill(Color.valueOf("#1a73e8"));
+            logoBox.getChildren().add(fallback);
+        }
         Label logoSub = new Label("Database Migration Assistant");
         logoSub.setFont(Font.font("System", 10));
-        logoSub.setTextFill(Color.valueOf("#bfd6f6"));
-        logoBox.getChildren().addAll(logoTitle, logoSub);
+        logoSub.setTextFill(Color.valueOf("#6b7280"));
+        logoSub.setAlignment(Pos.CENTER);
+        logoBox.getChildren().addAll(logoImg, logoSub);
         sidebar.getChildren().add(logoBox);
 
         // 导航分组标签
