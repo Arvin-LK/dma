@@ -1114,7 +1114,7 @@ public class DmaDesktopApplication extends Application {
         r.setPadding(new Insets(20, 24, 20, 24));
         return r;
     }
-    private ScrollPane wrap(VBox c) { ScrollPane s = new ScrollPane(c); s.setFitToWidth(true); s.setStyle("-fx-background-color: #f0f2f5;"); return s; }
+    private ScrollPane wrap(VBox c) { ScrollPane s = new ScrollPane(c); s.setFitToWidth(true); s.setFitToHeight(true); s.setStyle("-fx-background-color: #f0f2f5;"); return s; }
 
     // ── 白色卡片 ──
     private VBox card() {
@@ -1194,7 +1194,7 @@ public class DmaDesktopApplication extends Application {
     // ── TextArea ──
     private TextArea editorArea(String prompt) { // 输入区
         TextArea a = new TextArea();
-        a.setPrefRowCount(10); a.setPromptText(prompt);
+        a.setPrefRowCount(6); a.setPromptText(prompt);
         a.setStyle("-fx-font-family: 'Consolas', 'Monaco', monospace; -fx-font-size: 13px; "
             + "-fx-background-color: #fafbfc; -fx-background-radius: 8; "
             + "-fx-border-color: #d1d5db; -fx-border-radius: 8; -fx-border-width: 1; "
@@ -1203,7 +1203,7 @@ public class DmaDesktopApplication extends Application {
     }
     private TextArea resultArea(String prompt) { // 结果输出区
         TextArea a = new TextArea();
-        a.setPrefRowCount(14); a.setPromptText(prompt); a.setEditable(false);
+        a.setPrefRowCount(6); a.setPromptText(prompt); a.setEditable(false);
         a.setStyle(resultStyle());
         return a;
     }
