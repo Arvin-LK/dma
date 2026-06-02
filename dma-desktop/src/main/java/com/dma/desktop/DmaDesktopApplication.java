@@ -1092,36 +1092,58 @@ public class DmaDesktopApplication extends Application {
 
     // ==================== 报告导出 ====================
 
-    /** 将当前结果导出为 HTML 报告，保存到桌面并在浏览器中打开 */
+    /** 将当前结果导出为指定格式报告 */
     private void exportReport(String title, String subtitle, String content) {
-        if (content == null || content.isBlank()) {
-            return;
-        }
-        try {
-            String jsonBody = String.format("""
-                {"title": "%s", "subtitle": "%s", "content": "%s", "format": "HTML"}
-                """, escapeJson(title), escapeJson(subtitle), escapeJson(content));
+        if (content == null || content.isBlank()) return;
+        javafx.scene.control.Alert alert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.CONFIRMATION);
+        alert.setTitle("导出报告");
+        alert.setHeaderText("选择导出格式");
+        alert.setContentText("请选择报告文件格式:");
 
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create("http://localhost:8080/api/v1/report/export"))
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody)).build();
+        javafx.scene.control.ButtonType htmlBtn = new javafx.scene.control.ButtonType("HTML (浏览器)");
+        javafx.scene.control.ButtonType pdfBtn = new javafx.scene.control.ButtonType("PDF (便携文档)");
+        javafx.scene.control.ButtonType wordBtn = new javafx.scene.control.ButtonType("Word (可编辑)");
+        javafx.scene.control.ButtonType cancelBtn = javafx.scene.control.ButtonType.CANCEL;
 
-            HttpResponse<byte[]> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofByteArray());
+        alert.getButtonTypes().setAll(htmlBtn, pdfBtn, wordBtn, cancelBtn);
 
-            if (resp.statusCode() == 200) {
-                String desktop = System.getProperty("user.home") + "\\Desktop";
-                String filename = "DMA_Report_" + java.time.LocalDateTime.now()
-                        .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".html";
-                java.nio.file.Path filePath = java.nio.file.Path.of(desktop, filename);
-                java.nio.file.Files.write(filePath, resp.body());
+        alert.showAndWait().ifPresent(btn -> {
+            String format;
+            String ext;
+            if (btn == htmlBtn) { format = "HTML"; ext = ".html"; }
+            else if (btn == pdfBtn) { format = "PDF"; ext = ".pdf"; }
+            else if (btn == wordBtn) { format = "WORD"; ext = ".docx"; }
+            else return;
 
-                // 用默认浏览器打开
-                java.awt.Desktop.getDesktop().open(filePath.toFile());
-            }
-        } catch (Exception e) {
-            // 导出失败静默处理
-        }
+            new Thread(() -> {
+                try {
+                    String jsonBody = String.format("""
+                        {"title": "%s", "subtitle": "%s", "content": "%s", "format": "%s"}
+                        """, escapeJson(title), escapeJson(subtitle), escapeJson(content), format);
+
+                    HttpRequest req = HttpRequest.newBuilder()
+                            .uri(URI.create("http://localhost:8080/api/v1/report/export"))
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString(jsonBody)).build();
+
+                    HttpResponse<byte[]> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofByteArray());
+
+                    if (resp.statusCode() == 200) {
+                        String desktop = System.getProperty("user.home") + "\\Desktop";
+                        String filename = "DMA_Report_" + java.time.LocalDateTime.now()
+                                .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ext;
+                        java.nio.file.Path filePath = java.nio.file.Path.of(desktop, filename);
+                        java.nio.file.Files.write(filePath, resp.body());
+
+                        Platform.runLater(() -> {
+                            try {
+                                java.awt.Desktop.getDesktop().open(filePath.toFile());
+                            } catch (Exception ignored) {}
+                        });
+                    }
+                } catch (Exception ignored) {}
+            }).start();
+        });
     }
 
     // ==================== 工具方法 ====================

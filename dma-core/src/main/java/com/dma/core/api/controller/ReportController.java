@@ -1,5 +1,10 @@
 package com.dma.core.api.controller;
 
+import com.dma.common.enums.ReportFormat;
+import com.dma.core.domain.model.report.MigrationReport;
+import com.dma.core.domain.model.scanner.ScanResult;
+import com.dma.core.domain.service.ReportGenerator;
+import com.dma.core.infrastructure.report.ReportGeneratorFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -10,20 +15,27 @@ import org.springframework.web.bind.annotation.*;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 /**
  * 报告导出 API。
- * 将扫描/转换结果导出为 HTML/PDF/Word 格式。
+ * 支持 HTML / PDF / Word 三种格式。
  */
 @RestController
 @RequestMapping("/api/v1/report")
 public class ReportController {
 
     private static final Logger log = LoggerFactory.getLogger(ReportController.class);
+    private final ReportGeneratorFactory reportFactory;
+
+    public ReportController(ReportGeneratorFactory reportFactory) {
+        this.reportFactory = reportFactory;
+    }
 
     /**
-     * 导出 HTML 报告。
+     * 导出报告（支持 HTML/PDF/Word）。
      */
     @PostMapping("/export")
     public ResponseEntity<byte[]> exportReport(@RequestBody Map<String, Object> body) {
@@ -42,8 +54,19 @@ public class ReportController {
             reportBytes = buildHtmlReport(title, subtitle, content);
             filename = "DMA_Report_" + timestamp() + ".html";
             mimeType = "text/html; charset=UTF-8";
+        } else if ("PDF".equalsIgnoreCase(format)) {
+            MigrationReport report = buildMigrationReport(title, subtitle, content);
+            ReportGenerator gen = reportFactory.getGenerator(ReportFormat.PDF);
+            reportBytes = gen.generate(report, parseSimpleResults(content));
+            filename = "DMA_Report_" + timestamp() + ".pdf";
+            mimeType = "application/pdf";
+        } else if ("WORD".equalsIgnoreCase(format)) {
+            MigrationReport report = buildMigrationReport(title, subtitle, content);
+            ReportGenerator gen = reportFactory.getGenerator(ReportFormat.WORD);
+            reportBytes = gen.generate(report, parseSimpleResults(content));
+            filename = "DMA_Report_" + timestamp() + ".docx";
+            mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
         } else {
-            // PDF and Word are not yet implemented, fallback to HTML
             reportBytes = buildHtmlReport(title, subtitle, content);
             filename = "DMA_Report_" + timestamp() + ".html";
             mimeType = "text/html; charset=UTF-8";
@@ -145,5 +168,34 @@ public class ReportController {
 
     private String timestamp() {
         return LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+    }
+
+    private MigrationReport buildMigrationReport(String title, String subtitle, String content) {
+        String[] parts = subtitle.contains(" → ") ? subtitle.split(" → ") : new String[]{"", ""};
+        MigrationReport report = new MigrationReport(title,
+                parts.length > 0 ? parts[0].trim() : "",
+                parts.length > 1 ? parts[1].trim() : "");
+        report.setTotalIssues(0);
+        return report;
+    }
+
+    private List<ScanResult> parseSimpleResults(String content) {
+        List<ScanResult> results = new ArrayList<>();
+        if (content == null || content.isBlank()) return results;
+        // Extract rule codes and severity from the formatted content
+        String[] lines = content.split("\n");
+        for (String line : lines) {
+            if (line.contains("✗") || line.contains("ERROR")) {
+                results.add(new ScanResult("DETECTED", line.substring(0, Math.min(100, line.length())),
+                        "MANUAL_REVIEW", "ERROR", line.trim(), com.dma.core.domain.model.scanner.ScanSource.MANUAL_INPUT));
+            } else if (line.contains("⚠") || line.contains("WARNING")) {
+                results.add(new ScanResult("DETECTED", line.substring(0, Math.min(100, line.length())),
+                        "AUTO_CONVERTIBLE", "WARNING", line.trim(), com.dma.core.domain.model.scanner.ScanSource.MANUAL_INPUT));
+            } else if (line.contains("ℹ") || line.contains("INFO")) {
+                results.add(new ScanResult("DETECTED", line.substring(0, Math.min(100, line.length())),
+                        "COMPATIBLE", "INFO", line.trim(), com.dma.core.domain.model.scanner.ScanSource.MANUAL_INPUT));
+            }
+        }
+        return results;
     }
 }
