@@ -28,6 +28,26 @@ public class ConnectionApplicationService {
     public void delete(ConnectionId id) { repository.delete(id); }
 
     public boolean test(String dbType, String host, int port, String username, String password, String database) {
-        try { return true; } catch (Exception e) { throw new ConnectionTimeoutException(host, port); }
+        try {
+            DatabaseType type = DatabaseType.valueOf(dbType);
+            String jdbcUrl = buildJdbcUrl(type, host, port, database);
+            java.sql.Connection conn = java.sql.DriverManager.getConnection(jdbcUrl, username, password);
+            conn.close();
+            log.info("Connection test successful: {}:{}", host, port);
+            return true;
+        } catch (Exception e) {
+            log.warn("Connection test failed: {}:{}", host, port, e);
+            throw new ConnectionTimeoutException(host, port);
+        }
+    }
+
+    private String buildJdbcUrl(DatabaseType dbType, String host, int port, String database) {
+        return switch (dbType) {
+            case MYSQL -> String.format("jdbc:mysql://%s:%d/%s?useSSL=false&connectTimeout=5000", host, port, database != null ? database : "");
+            case POSTGRESQL -> String.format("jdbc:postgresql://%s:%d/%s?connectTimeout=5", host, port, database != null ? database : "");
+            case ORACLE -> String.format("jdbc:oracle:thin:@%s:%d:%s", host, port, database != null ? database : "");
+            case DAMENG -> String.format("jdbc:dm://%s:%d/%s", host, port, database != null ? database : "");
+            default -> String.format("jdbc:mysql://%s:%d/%s", host, port, database != null ? database : "");
+        };
     }
 }

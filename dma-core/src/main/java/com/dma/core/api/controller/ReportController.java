@@ -1,10 +1,5 @@
 package com.dma.core.api.controller;
 
-import com.dma.common.enums.ReportFormat;
-import com.dma.core.domain.model.report.MigrationReport;
-import com.dma.core.domain.model.scanner.ScanResult;
-import com.dma.core.domain.service.ReportGenerator;
-import com.dma.core.infrastructure.report.ReportGeneratorFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -15,8 +10,6 @@ import org.springframework.web.bind.annotation.*;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -28,11 +21,6 @@ import java.util.Map;
 public class ReportController {
 
     private static final Logger log = LoggerFactory.getLogger(ReportController.class);
-    private final ReportGeneratorFactory reportFactory;
-
-    public ReportController(ReportGeneratorFactory reportFactory) {
-        this.reportFactory = reportFactory;
-    }
 
     /**
      * 导出报告（支持 HTML/PDF/Word）。
@@ -50,20 +38,26 @@ public class ReportController {
         String filename;
         String mimeType;
 
-        if ("HTML".equalsIgnoreCase(format)) {
-            reportBytes = buildHtmlReport(title, subtitle, content);
-            filename = "DMA_Report_" + timestamp() + ".html";
-            mimeType = "text/html; charset=UTF-8";
-        } else if ("PDF".equalsIgnoreCase(format)) {
-            MigrationReport report = buildMigrationReport(title, subtitle, content);
-            ReportGenerator gen = reportFactory.getGenerator(ReportFormat.PDF);
-            reportBytes = gen.generate(report, parseSimpleResults(content));
+        if ("PDF".equalsIgnoreCase(format)) {
+            // HTML → PDF via Flying Saucer
+            byte[] htmlBytes = buildHtmlReport(title, subtitle, content);
+            try {
+                var out = new java.io.ByteArrayOutputStream();
+                var renderer = new org.xhtmlrenderer.pdf.ITextRenderer();
+                renderer.setDocumentFromString(new String(htmlBytes, StandardCharsets.UTF_8));
+                renderer.layout();
+                renderer.createPDF(out);
+                renderer.finishPDF();
+                reportBytes = out.toByteArray();
+            } catch (Exception e) {
+                log.warn("PDF generation failed, falling back to HTML: {}", e.getMessage());
+                reportBytes = htmlBytes;
+            }
             filename = "DMA_Report_" + timestamp() + ".pdf";
             mimeType = "application/pdf";
         } else if ("WORD".equalsIgnoreCase(format)) {
-            MigrationReport report = buildMigrationReport(title, subtitle, content);
-            ReportGenerator gen = reportFactory.getGenerator(ReportFormat.WORD);
-            reportBytes = gen.generate(report, parseSimpleResults(content));
+            // Generate Word document from content
+            reportBytes = buildWordReport(title, subtitle, content);
             filename = "DMA_Report_" + timestamp() + ".docx";
             mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
         } else {
@@ -170,32 +164,60 @@ public class ReportController {
         return LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
     }
 
-    private MigrationReport buildMigrationReport(String title, String subtitle, String content) {
-        String[] parts = subtitle.contains(" → ") ? subtitle.split(" → ") : new String[]{"", ""};
-        MigrationReport report = new MigrationReport(title,
-                parts.length > 0 ? parts[0].trim() : "",
-                parts.length > 1 ? parts[1].trim() : "");
-        report.setTotalIssues(0);
-        return report;
-    }
+    private byte[] buildWordReport(String title, String subtitle, String content) {
+        try {
+            var doc = new org.apache.poi.xwpf.usermodel.XWPFDocument();
+            var out = new java.io.ByteArrayOutputStream();
 
-    private List<ScanResult> parseSimpleResults(String content) {
-        List<ScanResult> results = new ArrayList<>();
-        if (content == null || content.isBlank()) return results;
-        // Extract rule codes and severity from the formatted content
-        String[] lines = content.split("\n");
-        for (String line : lines) {
-            if (line.contains("✗") || line.contains("ERROR")) {
-                results.add(new ScanResult("DETECTED", line.substring(0, Math.min(100, line.length())),
-                        "MANUAL_REVIEW", "ERROR", line.trim(), com.dma.core.domain.model.scanner.ScanSource.MANUAL_INPUT));
-            } else if (line.contains("⚠") || line.contains("WARNING")) {
-                results.add(new ScanResult("DETECTED", line.substring(0, Math.min(100, line.length())),
-                        "AUTO_CONVERTIBLE", "WARNING", line.trim(), com.dma.core.domain.model.scanner.ScanSource.MANUAL_INPUT));
-            } else if (line.contains("ℹ") || line.contains("INFO")) {
-                results.add(new ScanResult("DETECTED", line.substring(0, Math.min(100, line.length())),
-                        "COMPATIBLE", "INFO", line.trim(), com.dma.core.domain.model.scanner.ScanSource.MANUAL_INPUT));
+            // Title
+            var titleP = doc.createParagraph();
+            titleP.setAlignment(org.apache.poi.xwpf.usermodel.ParagraphAlignment.CENTER);
+            var titleRun = titleP.createRun();
+            titleRun.setText(title);
+            titleRun.setBold(true);
+            titleRun.setFontSize(18);
+            titleRun.setFontFamily("Microsoft YaHei");
+
+            // Subtitle
+            if (subtitle != null && !subtitle.isBlank()) {
+                var subP = doc.createParagraph();
+                subP.setAlignment(org.apache.poi.xwpf.usermodel.ParagraphAlignment.CENTER);
+                var subRun = subP.createRun();
+                subRun.setText(subtitle);
+                subRun.setFontSize(12);
+                subRun.setColor("64748b");
             }
+
+            doc.createParagraph(); // blank line
+
+            // Content as monospaced text
+            String[] lines = content.split("\n");
+            for (String line : lines) {
+                var p = doc.createParagraph();
+                var run = p.createRun();
+                run.setText(line);
+                run.setFontSize(11);
+                run.setFontFamily("Consolas");
+                if (line.contains("✗") || line.contains("ERROR")) run.setColor("dc2626");
+                else if (line.contains("⚠") || line.contains("WARNING")) run.setColor("d97706");
+                else if (line.contains("✓") || line.contains("COMPATIBLE")) run.setColor("16a34a");
+            }
+
+            // Footer
+            doc.createParagraph();
+            var footerP = doc.createParagraph();
+            footerP.setAlignment(org.apache.poi.xwpf.usermodel.ParagraphAlignment.CENTER);
+            var footerRun = footerP.createRun();
+            footerRun.setText("DMA — Database Migration Assistant v1.0.0");
+            footerRun.setFontSize(9);
+            footerRun.setColor("94a3b8");
+
+            doc.write(out);
+            doc.close();
+            return out.toByteArray();
+        } catch (Exception e) {
+            log.error("Word generation failed", e);
+            return ("Word generation error: " + e.getMessage()).getBytes(StandardCharsets.UTF_8);
         }
-        return results;
     }
 }

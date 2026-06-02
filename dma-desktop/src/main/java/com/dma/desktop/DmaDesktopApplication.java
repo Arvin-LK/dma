@@ -239,25 +239,37 @@ public class DmaDesktopApplication extends Application {
                 Platform.runLater(() -> {
                     savedConnections.clear();
                     savedConnCombo.getItems().clear();
-                    // 解析 JSON 中的连接列表
-                    Pattern p = Pattern.compile(
-                        "\\{\"name\":\"([^\"]+)\".*?\"dbType\":\"([^\"]+)\".*?\"host\":\"([^\"]+)\".*?\"port\":(\\d+).*?\"username\":\"([^\"]+)\".*?\"databaseName\":\"([^\"]*)\""
-                    );
-                    Matcher m = p.matcher(resp);
-                    while (m.find()) {
-                        String name = m.group(1);
-                        savedConnCombo.getItems().add(name);
-                        java.util.Map<String, String> info = new java.util.HashMap<>();
-                        info.put("dbType", m.group(2));
-                        info.put("host", m.group(3));
-                        info.put("port", m.group(4));
-                        info.put("username", m.group(5));
-                        info.put("databaseName", m.group(6));
-                        savedConnections.put(name, info);
+                    // 按 JSON 对象分割（更稳健的方式）
+                    String[] objects = resp.split("\\},\\s*\\{");
+                    for (String obj : objects) {
+                        String name = extractJsonValue(obj, "name");
+                        String id = extractJsonValue(obj, "id"); // id is numeric
+                        if (id.isEmpty()) {
+                            // Try numeric id extraction
+                            java.util.regex.Matcher idm = java.util.regex.Pattern.compile("\"id\"\\s*:\\s*(\\d+)").matcher(obj);
+                            if (idm.find()) id = idm.group(1);
+                        }
+                        if (name != null && !name.isEmpty()) {
+                            savedConnCombo.getItems().add(name);
+                            java.util.Map<String, String> info = new java.util.HashMap<>();
+                            info.put("id", id);
+                            info.put("dbType", extractJsonValue(obj, "dbType"));
+                            info.put("host", extractJsonValue(obj, "host"));
+                            info.put("port", extractJsonValue(obj, "port"));
+                            info.put("username", extractJsonValue(obj, "username"));
+                            info.put("databaseName", extractJsonValue(obj, "databaseName"));
+                            savedConnections.put(name, info);
+                        }
                     }
                     dbStatusLabel.setText(savedConnections.isEmpty() ? "暂无已保存的连接" : "已加载 " + savedConnections.size() + " 个连接");
+                    if (!savedConnections.isEmpty()) dbStatusLabel.setTextFill(Color.valueOf("#16a34a"));
                 });
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                Platform.runLater(() -> {
+                    dbStatusLabel.setText("加载连接失败: " + e.getMessage());
+                    dbStatusLabel.setTextFill(Color.valueOf("#dc2626"));
+                });
+            }
         }).start();
     }
 
@@ -282,8 +294,7 @@ public class DmaDesktopApplication extends Application {
 
     /** 保存当前连接配置 */
     private void saveCurrentConnection() {
-        String name = dbHostField.getText() + "/" + dbSchemaCombo.getValue();
-        if (dbSchemaCombo.getValue() != null) name = dbSchemaCombo.getValue();
+        String name = dbSchemaCombo.getValue() != null ? dbSchemaCombo.getValue() : (dbHostField.getText() + "_db");
         // 弹出简易输入框
         javafx.scene.control.TextInputDialog dialog = new javafx.scene.control.TextInputDialog(name);
         dialog.setTitle("保存连接");
@@ -293,10 +304,10 @@ public class DmaDesktopApplication extends Application {
             String jsonBody = String.format("""
                 {"name": "%s", "dbType": "%s", "host": "%s", "port": %s,
                  "username": "%s", "password": "%s", "databaseName": "%s"}
-                """, connName, dbSourceCombo.getValue(),
-                dbHostField.getText(), dbPortField.getText(),
-                dbUserField.getText(), dbPasswordField.getText(),
-                dbSchemaCombo.getValue() != null ? dbSchemaCombo.getValue() : "");
+                """, escapeJson(connName), escapeJson(dbSourceCombo.getValue()),
+                escapeJson(dbHostField.getText()), escapeJson(dbPortField.getText()),
+                escapeJson(dbUserField.getText()), escapeJson(dbPasswordField.getText()),
+                escapeJson(dbSchemaCombo.getValue() != null ? dbSchemaCombo.getValue() : ""));
             new Thread(() -> {
                 try {
                     HttpRequest req = HttpRequest.newBuilder()
@@ -358,9 +369,9 @@ public class DmaDesktopApplication extends Application {
                 "sourceDbType": "%s"
             }
             """,
-            dbHostField.getText(), dbPortField.getText(),
-            dbUserField.getText(), dbPasswordField.getText(),
-            dbSourceCombo.getValue()
+            escapeJson(dbHostField.getText()), escapeJson(dbPortField.getText()),
+            escapeJson(dbUserField.getText()), escapeJson(dbPasswordField.getText()),
+            escapeJson(dbSourceCombo.getValue())
         );
 
         new Thread(() -> {
@@ -428,10 +439,10 @@ public class DmaDesktopApplication extends Application {
                 "targetDbType": "%s"
             }
             """,
-            dbHostField.getText(), dbPortField.getText(),
-            dbUserField.getText(), dbPasswordField.getText(),
-            dbSchemaCombo.getValue() != null ? dbSchemaCombo.getValue() : "",
-            dbSourceCombo.getValue(), dbTargetCombo.getValue()
+            escapeJson(dbHostField.getText()), escapeJson(dbPortField.getText()),
+            escapeJson(dbUserField.getText()), escapeJson(dbPasswordField.getText()),
+            escapeJson(dbSchemaCombo.getValue() != null ? dbSchemaCombo.getValue() : ""),
+            escapeJson(dbSourceCombo.getValue()), escapeJson(dbTargetCombo.getValue())
         );
 
         new Thread(() -> {
@@ -1254,11 +1265,13 @@ public class DmaDesktopApplication extends Application {
                         java.nio.file.Path filePath = java.nio.file.Path.of(desktop, filename);
                         java.nio.file.Files.write(filePath, resp.body());
 
-                        Platform.runLater(() -> {
+                        // Open file on background thread to avoid AWT/FX conflicts
+                        final java.nio.file.Path finalPath = filePath;
+                        new Thread(() -> {
                             try {
-                                java.awt.Desktop.getDesktop().open(filePath.toFile());
+                                java.awt.Desktop.getDesktop().open(finalPath.toFile());
                             } catch (Exception ignored) {}
-                        });
+                        }).start();
                     }
                 } catch (Exception ignored) {}
             }).start();
