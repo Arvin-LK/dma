@@ -18,11 +18,34 @@ dma:
   rule-source: json_file
   # 自定义规则目录（用户可在此放置自定义 JSON 规则）
   custom-rule-dir: ${user.home}/.dma/rules
-  # AI 配置（预留）
+  # AI 迁移顾问配置
   ai:
+    # 提供商: noop | ollama | openai | custom
+    #   noop   - 禁用（默认，无 AI 功能）
+    #   ollama - 本地大模型（内网环境，无需API Key）
+    #   openai - OpenAI 云端 API（需 API Key）
+    #   custom - 自定义 OpenAI 兼容端点
     provider: noop
-    api-key: ""
-    model: ""
+    timeout: 120
+    # 系统提示词（可选，有默认值）
+    # system-prompt: "你是一位资深数据库迁移专家..."
+
+    # Ollama 本地部署配置
+    ollama:
+      url: http://localhost:11434/v1
+      model: qwen2.5:7b        # 推荐: qwen2.5:7b / llama3:8b / deepseek-r1:8b
+
+    # OpenAI 云端配置
+    openai:
+      url: https://api.openai.com/v1
+      api-key: ""
+      model: gpt-4o-mini
+
+    # 自定义端点（通义千问/vLLM/DeepSeek 等 OpenAI 兼容服务）
+    custom:
+      url: http://localhost:8000/v1
+      api-key: ""
+      model: deepseek-r1:8b
   # License 配置（预留）
   license:
     enabled: false

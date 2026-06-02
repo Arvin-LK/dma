@@ -95,8 +95,12 @@ public class DmaDesktopApplication extends Application {
         Tab projTab = new Tab("项目源码扫描");
         projTab.setClosable(false);
         projTab.setContent(buildProjectScanPage());
+        // Tab 5: AI 顾问
+        Tab aiTab = new Tab("AI 顾问");
+        aiTab.setClosable(false);
+        aiTab.setContent(buildAiPage());
 
-        tabPane.getTabs().addAll(dbScanTab, sqlTab, spTab, projTab);
+        tabPane.getTabs().addAll(dbScanTab, sqlTab, spTab, projTab, aiTab);
         tabPane.getSelectionModel().select(0);
 
         Scene scene = new Scene(tabPane);
@@ -778,6 +782,121 @@ public class DmaDesktopApplication extends Application {
                 });
             } catch (Exception e) {
                 Platform.runLater(() -> sqlStatusLabel.setText("失败: " + e.getMessage()));
+            }
+        }).start();
+    }
+
+    // ==================== AI 顾问页面 ====================
+
+    private Label aiStatusLabel;
+    private TextArea aiInput, aiOutput;
+
+    private VBox buildAiPage() {
+        VBox root = new VBox(12);
+        root.setPadding(new Insets(16));
+        root.setStyle("-fx-background-color: #f8fafc;");
+
+        Label title = new Label("AI 迁移顾问");
+        title.setFont(Font.font("System", FontWeight.BOLD, 22));
+        title.setTextFill(Color.valueOf("#7c3aed"));
+
+        Label subtitle = new Label("支持云端大模型（OpenAI/通义千问）和本地大模型（Ollama），AI 辅助分析迁移问题");
+        subtitle.setFont(Font.font("System", 14));
+        subtitle.setTextFill(Color.valueOf("#64748b"));
+
+        // 状态栏
+        HBox statusRow = new HBox(12);
+        statusRow.setAlignment(Pos.CENTER_LEFT);
+        aiStatusLabel = new Label("检查 AI 服务状态...");
+        Button checkBtn = new Button("🔄 检查状态");
+        checkBtn.setOnAction(e -> checkAiStatus());
+        Button adviceBtn = new Button("💡 分析建议");
+        adviceBtn.setStyle("-fx-background-color: #7c3aed; -fx-text-fill: white; -fx-padding: 8 16;");
+        adviceBtn.setOnAction(e -> askAiAdvice());
+        statusRow.getChildren().addAll(aiStatusLabel, checkBtn, adviceBtn);
+
+        // 输入
+        aiInput = new TextArea();
+        aiInput.setPromptText("在此粘贴 SQL 或描述迁移问题，AI 将给出专业建议...\n\n例如:\nSELECT IFNULL(name, '') FROM users LIMIT 0, 10;\n\n提示：先在 application.yml 中配置 dma.ai.provider");
+        aiInput.setPrefRowCount(8);
+        aiInput.setStyle("-fx-font-family: 'Consolas', monospace; -fx-font-size: 13px;");
+
+        // 输出
+        aiOutput = new TextArea();
+        aiOutput.setEditable(false);
+        aiOutput.setPrefRowCount(16);
+        aiOutput.setStyle("-fx-font-family: 'Microsoft YaHei', 'Consolas', sans-serif; -fx-font-size: 13px;");
+
+        SplitPane split = new SplitPane();
+        split.setOrientation(javafx.geometry.Orientation.VERTICAL);
+        split.getItems().addAll(aiInput, aiOutput);
+        split.setDividerPosition(0, 0.3);
+        VBox.setVgrow(split, Priority.ALWAYS);
+
+        root.getChildren().addAll(title, subtitle, statusRow, split);
+
+        // 启动时检查状态
+        checkAiStatus();
+        return root;
+    }
+
+    private void checkAiStatus() {
+        aiStatusLabel.setText("检查中...");
+        new Thread(() -> {
+            try {
+                HttpRequest req = HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:8080/api/v1/ai/status"))
+                        .GET().build();
+                String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
+                Platform.runLater(() -> {
+                    if (resp.contains("\"available\":true")) {
+                        aiStatusLabel.setText("🤖 AI 已连接 | " + resp);
+                        aiStatusLabel.setTextFill(Color.valueOf("#16a34a"));
+                    } else {
+                        aiStatusLabel.setText("⚠ AI 未启用 | 请配置 application.yml");
+                        aiStatusLabel.setTextFill(Color.valueOf("#d97706"));
+                    }
+                });
+            } catch (Exception e) {
+                Platform.runLater(() -> {
+                    aiStatusLabel.setText("✗ 服务不可用");
+                    aiStatusLabel.setTextFill(Color.valueOf("#dc2626"));
+                });
+            }
+        }).start();
+    }
+
+    private void askAiAdvice() {
+        String input = aiInput.getText().trim();
+        if (input.isEmpty()) {
+            aiOutput.setText("请先输入需要分析的 SQL 或问题描述");
+            return;
+        }
+        aiOutput.setText("AI 思考中...");
+        new Thread(() -> {
+            try {
+                String json = String.format("""
+                    {"sourceSql": "%s", "message": "%s", "severity": "WARNING",
+                     "compatibilityLevel": "MANUAL_REVIEW", "ruleCode": "USER_ASK"}
+                    """, escapeJson(input), escapeJson(input));
+                HttpRequest req = HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:8080/api/v1/ai/advice"))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(json)).build();
+                String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
+                Platform.runLater(() -> {
+                    // Extract data from JSON response
+                    String data = resp;
+                    if (resp.contains("\"data\":\"")) {
+                        int s = resp.indexOf("\"data\":\"") + 8;
+                        int e = resp.lastIndexOf("\"}");
+                        if (e > s) data = resp.substring(s, e)
+                                .replace("\\n", "\n").replace("\\t", "    ");
+                    }
+                    aiOutput.setText("🤖 AI 建议:\n\n" + data);
+                });
+            } catch (Exception e) {
+                Platform.runLater(() -> aiOutput.setText("AI 请求失败: " + e.getMessage()));
             }
         }).start();
     }
