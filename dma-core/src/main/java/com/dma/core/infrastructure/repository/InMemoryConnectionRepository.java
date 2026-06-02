@@ -7,8 +7,8 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-/** MVP in-memory implementation. Will be replaced with SQLite in production. */
-@Repository
+/** MVP in-memory implementation. Replaced by SqliteConnectionRepository. */
+// @Repository
 public class InMemoryConnectionRepository implements ConnectionRepository {
     private final Map<ConnectionId, DatabaseConnection> store = new ConcurrentHashMap<>();
     private final AtomicLong idSeq = new AtomicLong(1);
