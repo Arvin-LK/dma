@@ -693,30 +693,166 @@ public class DmaDesktopApplication extends Application {
     // ── 报告导出 ──
     private void exportReport(String title, String subtitle, String content) {
         if (content == null || content.isBlank()) return;
-        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-        alert.setTitle("导出报告"); alert.setHeaderText("选择导出格式");
-        ButtonType htmlBtn = new ButtonType("HTML (浏览器)"), pdfBtn = new ButtonType("PDF (便携)"), wordBtn = new ButtonType("Word (可编辑)");
-        alert.getButtonTypes().setAll(htmlBtn, pdfBtn, wordBtn, ButtonType.CANCEL);
-        alert.showAndWait().ifPresent(btn -> {
-            String fmt = btn == pdfBtn ? "PDF" : btn == wordBtn ? "WORD" : "HTML";
-            String ext = btn == pdfBtn ? ".pdf" : btn == wordBtn ? ".docx" : ".html";
-            new Thread(() -> {
-                try {
-                    String body = String.format("""
-{"title":"%s","subtitle":"%s","content":"%s","format":"%s"}""",
-                            esc(title), esc(subtitle), esc(content), fmt);
-                    HttpRequest req = HttpRequest.newBuilder().uri(URI.create("http://localhost:8080/api/v1/report/export"))
-                            .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
-                    byte[] data = httpClient.send(req, HttpResponse.BodyHandlers.ofByteArray()).body();
-                    String desktop = System.getProperty("user.home") + "\\Desktop";
-                    String fn = "DMA_Report_" + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ext;
-                    java.nio.file.Path fp = java.nio.file.Path.of(desktop, fn);
-                    java.nio.file.Files.write(fp, data);
-                    new Thread(() -> { try { java.awt.Desktop.getDesktop().open(fp.toFile()); } catch (Exception ignored) {} }).start();
-                    Platform.runLater(() -> statusLeft.setText("已导出: " + fn));
-                } catch (Exception ignored) {}
-            }).start();
+        showExportDialog(title, subtitle, content);
+    }
+
+    /** DBeaver 风格导出对话框 */
+    private void showExportDialog(String title, String subtitle, String content) {
+        Stage dialog = new Stage();
+        dialog.initModality(javafx.stage.Modality.APPLICATION_MODAL);
+        dialog.setTitle("导出报告");
+
+        VBox root = new VBox(0);
+        root.setStyle("-fx-background-color: white; -fx-background-radius: 10;");
+
+        // 标题栏
+        HBox titleBar = new HBox();
+        titleBar.setPadding(new Insets(20, 24, 16, 24));
+        titleBar.setStyle("-fx-background-color: #fafbfc; -fx-background-radius: 10 10 0 0; "
+            + "-fx-border-color: #e5e7eb; -fx-border-width: 0 0 1 0;");
+        Label titleLbl = new Label("选择导出格式");
+        titleLbl.setFont(Font.font("System", FontWeight.BOLD, 16));
+        titleLbl.setTextFill(Color.valueOf("#1f2937"));
+        titleBar.getChildren().add(titleLbl);
+
+        // 格式选项区
+        VBox optionsBox = new VBox(6);
+        optionsBox.setPadding(new Insets(20, 24, 20, 24));
+
+        // 三个格式选项的数据
+        String[][] formats = {
+            {"📄", "HTML", "浏览器查看", "适合在浏览器中查看，支持完整样式和排版", "#2563eb"},
+            {"📕", "PDF", "便携文档", "固定版式，适合存档和分发，不可修改", "#dc2626"},
+            {"📝", "Word", "可编辑文档", "适合需要进一步编辑的迁移方案文档", "#059669"}
+        };
+
+        final String[] selectedFmt = {"HTML"};
+
+        for (String[] f : formats) {
+            HBox row = new HBox(14);
+            row.setPadding(new Insets(14, 16, 14, 16));
+            row.setStyle("-fx-background-color: white; -fx-background-radius: 8; "
+                + "-fx-border-color: #e5e7eb; -fx-border-radius: 8; -fx-border-width: 1; -fx-cursor: hand;");
+            row.setAlignment(Pos.CENTER_LEFT);
+
+            Label iconLbl = new Label(f[0]);
+            iconLbl.setFont(Font.font(28));
+
+            VBox textBox = new VBox(4);
+            Label nameLbl = new Label(f[1] + " — " + f[2]);
+            nameLbl.setFont(Font.font("System", FontWeight.BOLD, 14));
+            nameLbl.setTextFill(Color.valueOf("#1f2937"));
+            Label descLbl = new Label(f[3]);
+            descLbl.setFont(Font.font("System", 12));
+            descLbl.setTextFill(Color.valueOf("#6b7280"));
+            textBox.getChildren().addAll(nameLbl, descLbl);
+
+            Region spacer = new Region(); HBox.setHgrow(spacer, Priority.ALWAYS);
+
+            // Selection indicator
+            Label checkLbl = new Label("○");
+            checkLbl.setFont(Font.font(20));
+            checkLbl.setTextFill(Color.valueOf("#9ca3af"));
+
+            row.getChildren().addAll(iconLbl, textBox, spacer, checkLbl);
+            final String fmt = f[1];
+
+            row.setOnMouseClicked(e -> {
+                // Update all rows
+                for (javafx.scene.Node n : optionsBox.getChildren()) {
+                    if (n instanceof HBox r) {
+                        r.setStyle("-fx-background-color: white; -fx-background-radius: 8; "
+                            + "-fx-border-color: #e5e7eb; -fx-border-radius: 8; -fx-border-width: 1; -fx-cursor: hand;");
+                        // Reset checkmark
+                        for (javafx.scene.Node cn : r.getChildren()) {
+                            if (cn instanceof Label cl && (cl.getText().equals("●") || cl.getText().equals("○"))) {
+                                cl.setText("○"); cl.setTextFill(Color.valueOf("#9ca3af"));
+                            }
+                        }
+                    }
+                }
+                row.setStyle("-fx-background-color: #eff6ff; -fx-background-radius: 8; "
+                    + "-fx-border-color: #3b82f6; -fx-border-radius: 8; -fx-border-width: 2; -fx-cursor: hand;");
+                checkLbl.setText("●");
+                checkLbl.setTextFill(Color.valueOf("#2563eb"));
+                selectedFmt[0] = fmt;
+            });
+
+            // Default selection (HTML)
+            if (fmt.equals("HTML")) {
+                row.setStyle("-fx-background-color: #eff6ff; -fx-background-radius: 8; "
+                    + "-fx-border-color: #3b82f6; -fx-border-radius: 8; -fx-border-width: 2; -fx-cursor: hand;");
+                checkLbl.setText("●");
+                checkLbl.setTextFill(Color.valueOf("#2563eb"));
+            }
+
+            row.setOnMouseEntered(e -> {
+                if (!selectedFmt[0].equals(fmt)) {
+                    row.setStyle("-fx-background-color: #f9fafb; -fx-background-radius: 8; "
+                        + "-fx-border-color: #d1d5db; -fx-border-radius: 8; -fx-border-width: 1; -fx-cursor: hand;");
+                }
+            });
+            row.setOnMouseExited(e -> {
+                if (!selectedFmt[0].equals(fmt)) {
+                    row.setStyle("-fx-background-color: white; -fx-background-radius: 8; "
+                        + "-fx-border-color: #e5e7eb; -fx-border-radius: 8; -fx-border-width: 1; -fx-cursor: hand;");
+                }
+            });
+
+            optionsBox.getChildren().add(row);
+        }
+
+        // 按钮栏
+        HBox btnBar = new HBox(10);
+        btnBar.setPadding(new Insets(16, 24, 20, 24));
+        btnBar.setAlignment(Pos.CENTER_RIGHT);
+        btnBar.setStyle("-fx-background-color: #fafbfc; -fx-background-radius: 0 0 10 10; "
+            + "-fx-border-color: #e5e7eb; -fx-border-width: 1 0 0 0;");
+
+        Button cancelBtn = new Button("取消");
+        cancelBtn.setStyle("-fx-background-color: white; -fx-text-fill: #374151; "
+            + "-fx-background-radius: 6; -fx-border-color: #d1d5db; -fx-border-radius: 6; "
+            + "-fx-border-width: 1; -fx-padding: 9 22; -fx-font-size: 13px; -fx-cursor: hand;");
+        cancelBtn.setOnAction(e -> dialog.close());
+
+        Button okBtn = new Button("导出");
+        okBtn.setStyle("-fx-background-color: #1a73e8; -fx-text-fill: white; "
+            + "-fx-background-radius: 6; -fx-padding: 9 28; -fx-font-size: 13px; "
+            + "-fx-font-weight: bold; -fx-cursor: hand;");
+        okBtn.setOnAction(e -> {
+            dialog.close();
+            String fmt = selectedFmt[0];
+            String ext = "PDF".equals(fmt) ? ".pdf" : "Word".equals(fmt) ? ".docx" : ".html";
+            doExport(title, subtitle, content, fmt, ext);
         });
+
+        btnBar.getChildren().addAll(cancelBtn, okBtn);
+        root.getChildren().addAll(titleBar, optionsBox, btnBar);
+
+        Scene scene = new Scene(root, 460, 440);
+        scene.setFill(Color.TRANSPARENT);
+        dialog.setScene(scene);
+        dialog.showAndWait();
+    }
+
+    private void doExport(String title, String subtitle, String content, String fmt, String ext) {
+        new Thread(() -> {
+            try {
+                String body = String.format("""
+{"title":"%s","subtitle":"%s","content":"%s","format":"%s"}""",
+                        esc(title), esc(subtitle), esc(content), fmt);
+                HttpRequest req = HttpRequest.newBuilder().uri(URI.create("http://localhost:8080/api/v1/report/export"))
+                        .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
+                byte[] data = httpClient.send(req, HttpResponse.BodyHandlers.ofByteArray()).body();
+                String desktop = System.getProperty("user.home") + "\\Desktop";
+                String fn = "DMA_Report_" + java.time.LocalDateTime.now()
+                    .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ext;
+                java.nio.file.Path fp = java.nio.file.Path.of(desktop, fn);
+                java.nio.file.Files.write(fp, data);
+                new Thread(() -> { try { java.awt.Desktop.getDesktop().open(fp.toFile()); } catch (Exception ignored) {} }).start();
+                Platform.runLater(() -> statusLeft.setText("已导出: " + fn));
+            } catch (Exception ignored) {}
+        }).start();
     }
 
     // ═══════════════════════════════════════════════════════════════
