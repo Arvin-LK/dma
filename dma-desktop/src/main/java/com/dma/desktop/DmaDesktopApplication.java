@@ -334,21 +334,13 @@ public class DmaDesktopApplication extends Application {
     // 数据库体检页 — 三区布局
     // ═══════════════════════════════════════════════════════════════
     private ScrollPane buildScanPage() {
-        VBox root = pageContainer();
+        VBox root = new VBox(12);
+        root.setPadding(new Insets(16, 20, 16, 20));
 
         // ── Zone 1: 连接配置卡 ──
         VBox connCard = card();
         connCard.getChildren().add(secLabel("数据库连接配置"));
 
-        // 已保存连接行
-        savedConn = cb("选择已保存的连接...", 220);
-        savedConn.setOnAction(e -> onConnSelected());
-        Button refreshBtn = sbtn("🔄 刷新"); refreshBtn.setOnAction(e -> loadSavedConnections());
-        Button saveBtn = sbtn("💾 保存"); saveBtn.setOnAction(e -> saveConn());
-        Button delBtn = sbtn("🗑 删除"); delBtn.setOnAction(e -> deleteConn());
-        HBox savedRow = hbox(8, savedConn, refreshBtn, saveBtn, delBtn);
-
-        // 连接参数行
         dbHost = tfld("localhost", 130); dbPort = tfld("3306", 70);
         dbUser = tfld("root", 100);
         dbPassword = new PasswordField(); dbPassword.setPrefWidth(100); dbPassword.setPromptText("密码");
@@ -360,7 +352,7 @@ public class DmaDesktopApplication extends Application {
 
         HBox connRow1 = hbox(8, lbl("主机:"), dbHost, lbl("端口:"), dbPort, lbl("用户:"), dbUser,
             lbl("密码:"), dbPassword, connectBtn, lbl("Schema:"), dbSchema);
-        connCard.getChildren().addAll(savedRow, connRow1);
+        connCard.getChildren().add(connRow1);
 
         // ── Zone 2: 操作区 ──
         dbProgress = new ProgressIndicator(-1); dbProgress.setVisible(false); dbProgress.setPrefSize(28, 28);
@@ -370,12 +362,23 @@ public class DmaDesktopApplication extends Application {
 
         HBox actionRow = hbox(12, lbl("源数据库:"), dbSource, lbl("目标数据库:"), dbTarget, scanBtn, exportBtn, dbProgress);
 
-        // ── Zone 3: 结果区 ──
-        dbResult = resultArea("扫描结果将在此显示 — 包含对象统计、兼容率及详细问题列表...");
+        // ── Zone 3: 结果区（自动填满剩余空间）──
+        dbResult = new TextArea();
+        dbResult.setPromptText("扫描结果将在此显示 — 包含对象统计、兼容率及详细问题列表...");
+        dbResult.setEditable(false);
+        dbResult.setStyle("-fx-font-family: 'Consolas', 'Monaco', monospace; -fx-font-size: 13px; "
+            + "-fx-background-color: #f8f9fb; -fx-background-radius: 8; "
+            + "-fx-border-color: #c7d2fe; -fx-border-radius: 8; -fx-border-width: 1 0 0 0; "
+            + "-fx-padding: 12; -fx-control-inner-background: #f8f9fb;");
 
         root.getChildren().addAll(connCard, actionRow, dbResult);
         VBox.setVgrow(dbResult, Priority.ALWAYS);
-        return wrap(root);
+
+        ScrollPane sp = new ScrollPane(root);
+        sp.setFitToWidth(true);
+        sp.setFitToHeight(true);
+        sp.setStyle("-fx-background-color: #f0f2f5;");
+        return sp;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -722,18 +725,153 @@ public class DmaDesktopApplication extends Application {
     private String formatScan(String json) {
         String b = json.contains("\"data\":") ? json.substring(json.indexOf("\"data\":") + 7) : json;
         StringBuilder sb = new StringBuilder();
-        sb.append("══════════════════════════════════════\n");
-        sb.append("  DMA 数据库兼容性体检报告\n");
-        sb.append("══════════════════════════════════════\n\n");
-        sb.append(String.format("  数据库: %s (%s → %s)\n\n", ej(b, "databaseName"), ej(b, "sourceDbType"), ej(b, "targetDbType")));
-        sb.append(String.format("  存储过程: %d  函数: %d  表: %d  视图: %d\n\n",
-            ji(b, "storedProcedureCount"), ji(b, "functionCount"), ji(b, "tableCount"), ji(b, "viewCount")));
-        sb.append(String.format("  ✓ 完全兼容: %d  ⚡ 可自动转换: %d\n  ⚠ 需人工审核: %d  ✗ 不兼容: %d\n",
-            ji(b, "compatibleCount"), ji(b, "autoConvertibleCount"), ji(b, "manualReviewCount"), ji(b, "incompatibleCount")));
+
+        // ── 报告头 ──
+        sb.append("╔══════════════════════════════════════════════════════╗\n");
+        sb.append("║         DMA 数据库兼容性体检报告                     ║\n");
+        sb.append("╚══════════════════════════════════════════════════════╝\n\n");
+        sb.append(String.format("  数据库: %s\n  迁移方向: %s → %s\n\n",
+            ej(b, "databaseName"), ej(b, "sourceDbType"), ej(b, "targetDbType")));
+
+        // ── 总览统计 ──
+        int stored = ji(b, "storedProcedureCount"), funcs = ji(b, "functionCount");
+        int tables = ji(b, "tableCount"), views = ji(b, "viewCount");
+        int total = stored + funcs + tables + views;
+        int compat = ji(b, "compatibleCount"), auto = ji(b, "autoConvertibleCount");
+        int manual = ji(b, "manualReviewCount"), incompat = ji(b, "incompatibleCount");
         double rate = jd(b, "compatibilityRate");
-        sb.append(String.format("\n  ★ 兼容率: %.1f%%\n  [", rate));
+
+        sb.append("── 对象统计 ──────────────────────────────────────────\n");
+        sb.append(String.format("  存储过程: %d  函数: %d  表: %d  视图: %d  合计: %d\n\n", stored, funcs, tables, views, total));
+        sb.append("── 兼容性概要 ────────────────────────────────────────\n");
+        sb.append(String.format("  ✓ 完全兼容:     %d 个\n", compat));
+        sb.append(String.format("  ⚡ 可自动转换:   %d 个\n", auto));
+        sb.append(String.format("  ⚠ 需人工审核:   %d 个\n", manual));
+        sb.append(String.format("  ✗ 不兼容:       %d 个\n", incompat));
+        sb.append(String.format("\n  ★ 兼容率: %.1f%%  [", rate));
         int bar = (int)(rate / 100 * 40);
-        sb.append("█".repeat(bar)).append("░".repeat(40 - bar)).append(String.format("] %.1f%%\n", rate));
+        sb.append("█".repeat(bar)).append("░".repeat(40 - bar)).append(String.format("] %.1f%%\n\n", rate));
+
+        // ── 详细对象分析 ──
+        sb.append("── 对象详细分析 ──────────────────────────────────────\n\n");
+
+        // Parse objects array
+        int objStart = b.indexOf("\"objects\":[");
+        if (objStart < 0) {
+            sb.append("  (无详细对象数据)\n");
+            return sb.toString();
+        }
+
+        // Split individual objects
+        String objsSection = b.substring(objStart + 11);
+        List<String> objJsons = new ArrayList<>();
+        int depth = 0, start = -1;
+        for (int i = 0; i < objsSection.length(); i++) {
+            char c = objsSection.charAt(i);
+            if (c == '{') { if (depth == 0) start = i; depth++; }
+            else if (c == '}') { depth--; if (depth == 0 && start >= 0) { objJsons.add(objsSection.substring(start, i + 1)); start = -1; } }
+            else if (c == ']' && depth == 0) break;  // end of array
+        }
+
+        // Group by type
+        Map<String, List<String>> byType = new LinkedHashMap<>();
+        byType.put("TABLE", new ArrayList<>());
+        byType.put("VIEW", new ArrayList<>());
+        byType.put("PROCEDURE", new ArrayList<>());
+        byType.put("FUNCTION", new ArrayList<>());
+        byType.put("TRIGGER", new ArrayList<>());
+
+        for (String oj : objJsons) {
+            String otype = ej(oj, "objectType");
+            if (otype.isEmpty()) otype = "OTHER";
+            byType.computeIfAbsent(otype, k -> new ArrayList<>()).add(oj);
+        }
+
+        int objIdx = 0;
+        for (Map.Entry<String, List<String>> entry : byType.entrySet()) {
+            List<String> group = entry.getValue();
+            if (group.isEmpty()) continue;
+            String typeLabel = switch (entry.getKey()) {
+                case "TABLE" -> "📋 表";
+                case "VIEW" -> "👁 视图";
+                case "PROCEDURE" -> "📦 存储过程";
+                case "FUNCTION" -> "ƒ 函数";
+                case "TRIGGER" -> "⚡ 触发器";
+                default -> "📄 " + entry.getKey();
+            };
+
+            for (String oj : group) {
+                objIdx++;
+                String name = ej(oj, "objectName");
+                String level = ej(oj, "compatibilityLevel");
+                String sev = ej(oj, "severity");
+                String rule = ej(oj, "ruleCode");
+                String desc = ej(oj, "description");
+                String sugDdl = ej(oj, "suggestedDdl");
+
+                String icon = switch (level) {
+                    case "COMPATIBLE" -> "✓";
+                    case "AUTO_CONVERTIBLE" -> "⚡";
+                    case "MANUAL_REVIEW" -> "⚠";
+                    case "INCOMPATIBLE", "PARSE_ERROR" -> "✗";
+                    default -> "?";
+                };
+
+                sb.append(String.format("  %s [%s] %s.%s\n", icon, typeLabel, entry.getKey().toLowerCase(), name));
+
+                // Show DDL snippet (first 200 chars)
+                String ddl = ej(oj, "ddl");
+                if (!ddl.isEmpty() && !"COMPATIBLE".equals(level)) {
+                    String shortDdl = ddl.length() > 200 ? ddl.substring(0, 200).replace("\\n", "\n    ") + "..." : ddl.replace("\\n", "\n    ");
+                    sb.append(String.format("      DDL: %s\n", shortDdl.replace("\n", "\n      ")));
+                }
+
+                // Show issues
+                if (!"COMPATIBLE".equals(level)) {
+                    // Parse individual issues from the issues array
+                    int issStartU = oj.indexOf("\"issues\":[");
+                    if (issStartU >= 0) {
+                        String issPart = oj.substring(issStartU + 10);
+                        Matcher im = Pattern.compile("\"([^\"]+)\"").matcher(issPart);
+                        int issueNum = 0;
+                        while (im.find()) {
+                            String issue = im.group(1);
+                            if (issue.length() > 2 && !issue.equals("issues")) {
+                                issueNum++;
+                                sb.append(String.format("      ⮡ 问题%d: %s\n", issueNum, issue));
+                            }
+                            if (issueNum >= 8) break; // max 8 issues per object
+                        }
+                    }
+
+                    // Rule code and description
+                    if (!rule.isEmpty()) {
+                        sb.append(String.format("      ⮡ 规则: [%s] %s\n", rule, desc));
+                    }
+
+                    // Suggested fix
+                    if (!sugDdl.isEmpty()) {
+                        String shortSug = sugDdl.length() > 300 ? sugDdl.substring(0, 300).replace("\\n", "\n           ") + "..." : sugDdl.replace("\\n", "\n           ");
+                        sb.append(String.format("      ⮡ 建议方案:\n           %s\n", shortSug));
+                    }
+
+                    // Action recommendation
+                    String action = switch (level) {
+                        case "AUTO_CONVERTIBLE" -> "     → 操作: 可自动转换，点击「导出报告」获取完整转换方案";
+                        case "MANUAL_REVIEW" -> "     → 操作: 需人工审核，请根据上述问题逐一修改后重新扫描验证";
+                        case "INCOMPATIBLE", "PARSE_ERROR" -> "     → 操作: 自动转换不可行，建议使用 AI 顾问或人工重写该对象";
+                        default -> "";
+                    };
+                    sb.append(action).append("\n");
+                }
+                sb.append("\n");
+            }
+        }
+
+        sb.append("══════════════════════════════════════════════════════\n");
+        sb.append(String.format("  合计: %d 个对象 | ✓兼容:%d ⚡可转换:%d ⚠需审核:%d ✗不兼容:%d | 兼容率:%.1f%%\n",
+            total, compat, auto, manual, incompat, rate));
+        sb.append("══════════════════════════════════════════════════════\n");
         return sb.toString();
     }
 
