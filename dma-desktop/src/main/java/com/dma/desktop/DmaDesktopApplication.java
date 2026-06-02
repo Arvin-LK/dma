@@ -164,6 +164,12 @@ public class DmaDesktopApplication extends Application {
         scanBtn.setStyle("-fx-background-color: #2563eb; -fx-text-fill: white; -fx-font-size: 16px; -fx-font-weight: bold; -fx-padding: 10 30;");
         scanBtn.setOnAction(e -> runDatabaseScan());
 
+        Button exportDbBtn = new Button("📄 导出报告");
+        exportDbBtn.setStyle("-fx-background-color: #f59e0b; -fx-text-fill: white; -fx-padding: 8 16;");
+        exportDbBtn.setOnAction(e -> exportReport("数据库体检报告",
+                dbSourceCombo.getValue() + " → " + dbTargetCombo.getValue(),
+                dbResultArea.getText()));
+
         dbProgress = new ProgressIndicator(-1);
         dbProgress.setVisible(false);
         dbProgress.setPrefSize(30, 30);
@@ -174,7 +180,7 @@ public class DmaDesktopApplication extends Application {
         actionRow.getChildren().addAll(
                 new Label("源数据库:"), dbSourceCombo,
                 new Label("→ 目标数据库:"), dbTargetCombo,
-                scanBtn, dbProgress, dbStatusLabel
+                scanBtn, exportDbBtn, dbProgress, dbStatusLabel
         );
 
         // 结果展示区
@@ -408,11 +414,17 @@ public class DmaDesktopApplication extends Application {
         scanBtn.setStyle("-fx-background-color: #2563eb; -fx-text-fill: white;");
         scanBtn.setOnAction(e -> runSqlScan());
 
+        Button exportSqlBtn = new Button("📄 导出");
+        exportSqlBtn.setStyle("-fx-background-color: #f59e0b; -fx-text-fill: white;");
+        exportSqlBtn.setOnAction(e -> exportReport("SQL 转换报告",
+                sqlSourceCombo.getValue() + " → " + sqlTargetCombo.getValue(),
+                sqlResult.getText()));
+
         sqlStatusLabel = new Label("");
         selectorRow.getChildren().addAll(
                 new Label("源:"), sqlSourceCombo,
                 new Label("目标:"), sqlTargetCombo,
-                scanBtn, sqlStatusLabel
+                scanBtn, exportSqlBtn, sqlStatusLabel
         );
 
         sqlInput = new TextArea();
@@ -659,6 +671,12 @@ public class DmaDesktopApplication extends Application {
         scanBtn.setStyle("-fx-background-color: #059669; -fx-text-fill: white; -fx-font-size: 15px; -fx-font-weight: bold; -fx-padding: 10 28;");
         scanBtn.setOnAction(e -> runProjectScan());
 
+        Button exportProjBtn = new Button("📄 导出报告");
+        exportProjBtn.setStyle("-fx-background-color: #f59e0b; -fx-text-fill: white; -fx-padding: 8 16;");
+        exportProjBtn.setOnAction(e -> exportReport("项目源码扫描报告",
+                projSourceCombo.getValue() + " → " + projTargetCombo.getValue(),
+                projResult.getText()));
+
         projProgress = new ProgressIndicator(-1);
         projProgress.setVisible(false);
         projProgress.setPrefSize(28, 28);
@@ -670,7 +688,7 @@ public class DmaDesktopApplication extends Application {
                 new Label("项目路径:"), projectPathField,
                 new Label("源:"), projSourceCombo,
                 new Label("目标:"), projTargetCombo,
-                scanBtn, projProgress, projStatusLabel
+                scanBtn, exportProjBtn, projProgress, projStatusLabel
         );
 
         // 结果区
@@ -925,6 +943,40 @@ public class DmaDesktopApplication extends Application {
     private String padRight(String s, int len) {
         if (s.length() >= len) return s;
         return s + " ".repeat(len - s.length());
+    }
+
+    // ==================== 报告导出 ====================
+
+    /** 将当前结果导出为 HTML 报告，保存到桌面并在浏览器中打开 */
+    private void exportReport(String title, String subtitle, String content) {
+        if (content == null || content.isBlank()) {
+            return;
+        }
+        try {
+            String jsonBody = String.format("""
+                {"title": "%s", "subtitle": "%s", "content": "%s", "format": "HTML"}
+                """, escapeJson(title), escapeJson(subtitle), escapeJson(content));
+
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:8080/api/v1/report/export"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody)).build();
+
+            HttpResponse<byte[]> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofByteArray());
+
+            if (resp.statusCode() == 200) {
+                String desktop = System.getProperty("user.home") + "\\Desktop";
+                String filename = "DMA_Report_" + java.time.LocalDateTime.now()
+                        .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".html";
+                java.nio.file.Path filePath = java.nio.file.Path.of(desktop, filename);
+                java.nio.file.Files.write(filePath, resp.body());
+
+                // 用默认浏览器打开
+                java.awt.Desktop.getDesktop().open(filePath.toFile());
+            }
+        } catch (Exception e) {
+            // 导出失败静默处理
+        }
     }
 
     // ==================== 工具方法 ====================
