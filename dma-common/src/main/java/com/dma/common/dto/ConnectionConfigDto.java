@@ -1,6 +1,7 @@
 package com.dma.common.dto;
 
 public class ConnectionConfigDto {
+    private long id;
     private String name;
     private String dbType;
     private String host;
@@ -10,11 +11,13 @@ public class ConnectionConfigDto {
 
     public ConnectionConfigDto() {}
 
-    public ConnectionConfigDto(String name, String dbType, String host, int port, String username, String databaseName) {
-        this.name = name; this.dbType = dbType; this.host = host;
+    public ConnectionConfigDto(long id, String name, String dbType, String host, int port, String username, String databaseName) {
+        this.id = id; this.name = name; this.dbType = dbType; this.host = host;
         this.port = port; this.username = username; this.databaseName = databaseName;
     }
 
+    public long getId() { return id; }
+    public void setId(long id) { this.id = id; }
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
     public String getDbType() { return dbType; }

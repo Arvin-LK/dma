@@ -36,6 +36,8 @@ public class DmaDesktopApplication extends Application {
     // === 数据库体检页组件 ===
     private TextField dbHostField, dbPortField, dbUserField, dbPasswordField;
     private ComboBox<String> dbSchemaCombo, dbSourceCombo, dbTargetCombo;
+    private ComboBox<String> savedConnCombo;
+    private java.util.Map<String, java.util.Map<String, String>> savedConnections = new java.util.HashMap<>();
     private TextArea dbResultArea;
     private Label dbStatusLabel;
     private ProgressIndicator dbProgress;
@@ -118,6 +120,33 @@ public class DmaDesktopApplication extends Application {
         subtitle.setFont(Font.font("System", 14));
         subtitle.setTextFill(Color.valueOf("#64748b"));
 
+        // 已保存连接选择区
+        HBox savedRow = new HBox(8);
+        savedRow.setPadding(new Insets(8, 12, 8, 12));
+        savedRow.setStyle("-fx-background-color: #eff6ff; -fx-border-color: #bfdbfe; -fx-border-radius: 8; -fx-background-radius: 8;");
+        savedRow.setAlignment(Pos.CENTER_LEFT);
+
+        savedConnCombo = new ComboBox<>();
+        savedConnCombo.setPrefWidth(280);
+        savedConnCombo.setPromptText("选择已保存的连接...");
+        savedConnCombo.setOnAction(e -> onSavedConnectionSelected());
+
+        Button refreshBtn = new Button("🔄 刷新");
+        refreshBtn.setStyle("-fx-background-color: #3b82f6; -fx-text-fill: white;");
+        refreshBtn.setOnAction(e -> loadSavedConnections());
+
+        Button saveBtn = new Button("💾 保存当前连接");
+        saveBtn.setStyle("-fx-background-color: #10b981; -fx-text-fill: white;");
+        saveBtn.setOnAction(e -> saveCurrentConnection());
+
+        Button deleteBtn = new Button("🗑 删除");
+        deleteBtn.setStyle("-fx-background-color: #ef4444; -fx-text-fill: white;");
+        deleteBtn.setOnAction(e -> deleteSavedConnection());
+
+        savedRow.getChildren().addAll(
+                new Label("已保存的连接:"), savedConnCombo, refreshBtn, saveBtn, deleteBtn
+        );
+
         // 连接配置区
         HBox connRow = new HBox(8);
         connRow.setPadding(new Insets(12));
@@ -191,8 +220,124 @@ public class DmaDesktopApplication extends Application {
         dbResultArea.setPromptText("扫描结果将在此显示...");
         VBox.setVgrow(dbResultArea, Priority.ALWAYS);
 
-        root.getChildren().addAll(title, subtitle, connRow, actionRow, dbResultArea);
+        root.getChildren().addAll(title, subtitle, savedRow, connRow, actionRow, dbResultArea);
         return root;
+    }
+
+    /** 从服务器加载已保存的连接列表 */
+    private void loadSavedConnections() {
+        new Thread(() -> {
+            try {
+                HttpRequest req = HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:8080/api/v1/connections?page=1&size=50"))
+                        .GET().build();
+                String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
+                Platform.runLater(() -> {
+                    savedConnections.clear();
+                    savedConnCombo.getItems().clear();
+                    // 解析 JSON 中的连接列表
+                    Pattern p = Pattern.compile(
+                        "\\{\"name\":\"([^\"]+)\".*?\"dbType\":\"([^\"]+)\".*?\"host\":\"([^\"]+)\".*?\"port\":(\\d+).*?\"username\":\"([^\"]+)\".*?\"databaseName\":\"([^\"]*)\""
+                    );
+                    Matcher m = p.matcher(resp);
+                    while (m.find()) {
+                        String name = m.group(1);
+                        savedConnCombo.getItems().add(name);
+                        java.util.Map<String, String> info = new java.util.HashMap<>();
+                        info.put("dbType", m.group(2));
+                        info.put("host", m.group(3));
+                        info.put("port", m.group(4));
+                        info.put("username", m.group(5));
+                        info.put("databaseName", m.group(6));
+                        savedConnections.put(name, info);
+                    }
+                    dbStatusLabel.setText(savedConnections.isEmpty() ? "暂无已保存的连接" : "已加载 " + savedConnections.size() + " 个连接");
+                });
+            } catch (Exception ignored) {}
+        }).start();
+    }
+
+    /** 选中已保存的连接时自动填充字段 */
+    private void onSavedConnectionSelected() {
+        String name = savedConnCombo.getValue();
+        if (name == null || !savedConnections.containsKey(name)) return;
+        var info = savedConnections.get(name);
+        dbHostField.setText(info.getOrDefault("host", "localhost"));
+        dbPortField.setText(info.getOrDefault("port", "3306"));
+        dbUserField.setText(info.getOrDefault("username", "root"));
+        dbPasswordField.setText("");
+        dbSchemaCombo.getItems().clear();
+        dbSchemaCombo.setValue(info.getOrDefault("databaseName", ""));
+        dbSchemaCombo.setPromptText(info.getOrDefault("databaseName", ""));
+        // 设置源库类型
+        String dbType = info.getOrDefault("dbType", "MYSQL");
+        if (dbSourceCombo.getItems().contains(dbType)) dbSourceCombo.setValue(dbType);
+        dbStatusLabel.setText("已选择连接: " + name);
+        dbStatusLabel.setTextFill(Color.valueOf("#0891b2"));
+    }
+
+    /** 保存当前连接配置 */
+    private void saveCurrentConnection() {
+        String name = dbHostField.getText() + "/" + dbSchemaCombo.getValue();
+        if (dbSchemaCombo.getValue() != null) name = dbSchemaCombo.getValue();
+        // 弹出简易输入框
+        javafx.scene.control.TextInputDialog dialog = new javafx.scene.control.TextInputDialog(name);
+        dialog.setTitle("保存连接");
+        dialog.setHeaderText("给这个连接起个名字");
+        dialog.setContentText("连接名称:");
+        dialog.showAndWait().ifPresent(connName -> {
+            String jsonBody = String.format("""
+                {"name": "%s", "dbType": "%s", "host": "%s", "port": %s,
+                 "username": "%s", "password": "%s", "databaseName": "%s"}
+                """, connName, dbSourceCombo.getValue(),
+                dbHostField.getText(), dbPortField.getText(),
+                dbUserField.getText(), dbPasswordField.getText(),
+                dbSchemaCombo.getValue() != null ? dbSchemaCombo.getValue() : "");
+            new Thread(() -> {
+                try {
+                    HttpRequest req = HttpRequest.newBuilder()
+                            .uri(URI.create("http://localhost:8080/api/v1/connections"))
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString(jsonBody)).build();
+                    httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+                    Platform.runLater(() -> {
+                        dbStatusLabel.setText("连接已保存: " + connName);
+                        dbStatusLabel.setTextFill(Color.valueOf("#16a34a"));
+                        loadSavedConnections();
+                    });
+                } catch (Exception ignored) {}
+            }).start();
+        });
+    }
+
+    /** 删除选中的已保存连接 */
+    private void deleteSavedConnection() {
+        String name = savedConnCombo.getValue();
+        if (name == null) return;
+        // 通过名称查找并删除
+        new Thread(() -> {
+            try {
+                // 获取完整列表找到 ID
+                HttpRequest listReq = HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:8080/api/v1/connections?page=1&size=50"))
+                        .GET().build();
+                String resp = httpClient.send(listReq, HttpResponse.BodyHandlers.ofString()).body();
+                // 简化：直接通过名称在列表中找到对应ID
+                Pattern p = Pattern.compile("\"name\":\"" + name + "\".*?\"id\":(\\d+)");
+                Matcher m = p.matcher(resp);
+                if (m.find()) {
+                    String id = m.group(1);
+                    HttpRequest delReq = HttpRequest.newBuilder()
+                            .uri(URI.create("http://localhost:8080/api/v1/connections/" + id))
+                            .DELETE().build();
+                    httpClient.send(delReq, HttpResponse.BodyHandlers.ofString());
+                    Platform.runLater(() -> {
+                        dbStatusLabel.setText("已删除: " + name);
+                        loadSavedConnections();
+                    });
+                }
+            } catch (Exception ignored) {}
+        }).start();
     }
 
     /** 连接数据库并获取可用 Schema 列表 */

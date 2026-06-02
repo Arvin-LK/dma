@@ -29,6 +29,7 @@ public class ConnectionController {
     public ApiResponse<PageResult<ConnectionConfigDto>> list(@RequestParam(defaultValue="1") int page, @RequestParam(defaultValue="20") int size) {
         List<DatabaseConnection> conns = service.list(page, size);
         List<ConnectionConfigDto> dtos = conns.stream().map(c -> new ConnectionConfigDto(
+            c.getId() != null ? c.getId().value() : 0,
             c.getName(), c.getDbType().name(), c.getHost(), c.getPort(), c.getUsername(), c.getDatabaseName())).toList();
         return ApiResponse.success(new PageResult<>(dtos, dtos.size(), page, size));
     }
