@@ -1,0 +1,186 @@
+{
+  "meta": {
+    "sourceDb": "ORACLE",
+    "targetDb": "GAUSSDB",
+    "version": "1.0.0",
+    "description": "Oracle 到华为 GaussDB 迁移兼容性规则集 — GaussDB 提供 Oracle 兼容模式，大部分 PL/SQL 可直接迁移",
+    "author": "DMA Team"
+  },
+  "rules": [
+    {
+      "code": "O2GD-FN-001", "name": "NVL → NVL", "category": "BUILTIN_FUNCTION", "severity": "INFO", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "NVL(${expr1}, ${expr2})", "replacementPattern": "NVL(${expr1}, ${expr2})",
+      "description": "GaussDB 在 Oracle 兼容模式下直接支持 NVL 函数",
+      "exampleSqlSource": "SELECT NVL(name, 'N/A') FROM users;", "exampleSqlTarget": "SELECT NVL(name, 'N/A') FROM users;"
+    },
+    {
+      "code": "O2GD-FN-002", "name": "DECODE → DECODE", "category": "BUILTIN_FUNCTION", "severity": "INFO", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "DECODE(${expr}, ${search}, ${result})", "replacementPattern": "DECODE(${expr}, ${search}, ${result})",
+      "description": "GaussDB 兼容 DECODE 函数",
+      "exampleSqlSource": "SELECT DECODE(status, 1, 'Active', 'Inactive') FROM users;", "exampleSqlTarget": "SELECT DECODE(status, 1, 'Active', 'Inactive') FROM users;"
+    },
+    {
+      "code": "O2GD-FN-003", "name": "SYSDATE → SYSDATE", "category": "BUILTIN_FUNCTION", "severity": "INFO", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "SYSDATE", "replacementPattern": "SYSDATE",
+      "description": "GaussDB 兼容 SYSDATE 函数",
+      "exampleSqlSource": "SELECT SYSDATE FROM dual;", "exampleSqlTarget": "SELECT SYSDATE FROM dual;"
+    },
+    {
+      "code": "O2GD-FN-004", "name": "TO_CHAR → TO_CHAR", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "TO_CHAR(${expr})", "replacementPattern": "TO_CHAR(${expr})",
+      "description": "GaussDB 兼容 TO_CHAR 但格式码有差异，Oracle 'YYYY' → GaussDB 'YYYY' 相同，但部分格式码不同",
+      "exampleSqlSource": "SELECT TO_CHAR(SYSDATE, 'YYYY-MM-DD') FROM dual;", "exampleSqlTarget": "SELECT TO_CHAR(SYSDATE, 'YYYY-MM-DD') FROM dual;"
+    },
+    {
+      "code": "O2GD-FN-005", "name": "TO_DATE → TO_DATE", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "TO_DATE(${str}, ${fmt})", "replacementPattern": "TO_DATE(${str}, ${fmt})",
+      "description": "GaussDB 兼容 TO_DATE，但日期格式码需确认兼容性",
+      "exampleSqlSource": "SELECT TO_DATE('2024-01-01', 'YYYY-MM-DD') FROM dual;", "exampleSqlTarget": "SELECT TO_DATE('2024-01-01', 'YYYY-MM-DD') FROM dual;"
+    },
+    {
+      "code": "O2GD-FN-006", "name": "WM_CONCAT → WM_CONCAT/LISTAGG", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "WM_CONCAT(${expr})", "replacementPattern": "WM_CONCAT(${expr})",
+      "description": "GaussDB 兼容 WM_CONCAT，也可使用 LISTAGG",
+      "exampleSqlSource": "SELECT WM_CONCAT(name) FROM users;", "exampleSqlTarget": "SELECT WM_CONCAT(name) FROM users;"
+    },
+    {
+      "code": "O2GD-FN-007", "name": "LISTAGG → LISTAGG", "category": "BUILTIN_FUNCTION", "severity": "INFO", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "LISTAGG(${expr}, ${delim})", "replacementPattern": "LISTAGG(${expr}, ${delim})",
+      "description": "GaussDB 兼容 LISTAGG 聚合函数",
+      "exampleSqlSource": "SELECT LISTAGG(name, ',') WITHIN GROUP (ORDER BY name) FROM users;", "exampleSqlTarget": "SELECT LISTAGG(name, ',') WITHIN GROUP (ORDER BY name) FROM users;"
+    },
+    {
+      "code": "O2GD-FN-008", "name": "CONNECT BY → CONNECT BY/递归CTE", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "CONNECT BY", "replacementPattern": "CONNECT BY",
+      "description": "GaussDB 兼容 CONNECT BY 层次查询（Oracle 兼容模式），但也可用 WITH RECURSIVE",
+      "exampleSqlSource": "SELECT * FROM tree START WITH pid IS NULL CONNECT BY PRIOR id=pid;", "exampleSqlTarget": "SELECT * FROM tree START WITH pid IS NULL CONNECT BY PRIOR id=pid;"
+    },
+    {
+      "code": "O2GD-SYN-001", "name": "ROWNUM → ROWNUM/LIMIT", "category": "SYNTAX", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "ROWNUM", "replacementPattern": "ROWNUM",
+      "description": "GaussDB 兼容 ROWNUM 伪列，也可用 LIMIT/OFFSET 替代",
+      "exampleSqlSource": "SELECT * FROM users WHERE ROWNUM <= 10;", "exampleSqlTarget": "SELECT * FROM users LIMIT 10;"
+    },
+    {
+      "code": "O2GD-SYN-002", "name": "序列 NEXTVAL/CURRVAL → NEXTVAL", "category": "SYNTAX", "severity": "INFO", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "${seq}.NEXTVAL", "replacementPattern": "nextval('${seq}')",
+      "description": "GaussDB 序列使用 nextval() 函数，Oracle 兼容模式下也支持 .NEXTVAL",
+      "exampleSqlSource": "INSERT INTO t (id) VALUES (myseq.NEXTVAL);", "exampleSqlTarget": "INSERT INTO t (id) VALUES (nextval('myseq'));"
+    },
+    {
+      "code": "O2GD-SYN-003", "name": "MERGE INTO → MERGE INTO", "category": "SYNTAX", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "MERGE INTO", "replacementPattern": "MERGE INTO",
+      "description": "GaussDB 支持 MERGE INTO，但部分高级子句需调整",
+      "exampleSqlSource": "MERGE INTO t USING dual ON (t.id=1) WHEN MATCHED THEN UPDATE SET name='A';", "exampleSqlTarget": "MERGE INTO t USING dual ON (t.id=1) WHEN MATCHED THEN UPDATE SET name='A';"
+    },
+    {
+      "code": "O2GD-SYN-004", "name": "DUAL → DUAL", "category": "SYNTAX", "severity": "INFO", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "FROM DUAL", "replacementPattern": "FROM DUAL",
+      "description": "GaussDB Oracle 兼容模式提供 DUAL 表",
+      "exampleSqlSource": "SELECT SYSDATE FROM DUAL;", "exampleSqlTarget": "SELECT SYSDATE FROM DUAL;"
+    },
+    {
+      "code": "O2GD-SYN-005", "name": "Hint → GaussDB Hint", "category": "SYNTAX", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "/*+ ${hint} */", "replacementPattern": "/*+ ${hint} */",
+      "description": "GaussDB 支持部分 Oracle Hint，但语法和名称差异大，建议逐一验证或移除",
+      "exampleSqlSource": "SELECT /*+ INDEX(t idx_name) */ * FROM t;", "exampleSqlTarget": "SELECT /*+ IndexScan(t idx_name) */ * FROM t;"
+    },
+    {
+      "code": "O2GD-DT-001", "name": "VARCHAR2 → VARCHAR2", "category": "DATATYPE", "severity": "INFO", "patternType": "DATATYPE",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "VARCHAR2", "replacementPattern": "VARCHAR2",
+      "description": "GaussDB Oracle 兼容模式支持 VARCHAR2 类型",
+      "exampleSqlSource": "CREATE TABLE t (name VARCHAR2(100));", "exampleSqlTarget": "CREATE TABLE t (name VARCHAR2(100));"
+    },
+    {
+      "code": "O2GD-DT-002", "name": "NUMBER → NUMBER", "category": "DATATYPE", "severity": "INFO", "patternType": "DATATYPE",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "NUMBER", "replacementPattern": "NUMBER",
+      "description": "GaussDB 兼容 NUMBER 类型",
+      "exampleSqlSource": "CREATE TABLE t (amount NUMBER(10,2));", "exampleSqlTarget": "CREATE TABLE t (amount NUMBER(10,2));"
+    },
+    {
+      "code": "O2GD-DT-003", "name": "DATE(含时间) → TIMESTAMP", "category": "DATATYPE", "severity": "WARNING", "patternType": "DATATYPE",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "DATE", "replacementPattern": "TIMESTAMP",
+      "description": "Oracle DATE 包含时分秒，GaussDB 的 DATE 仅含日期，推荐使用 TIMESTAMP",
+      "exampleSqlSource": "CREATE TABLE t (created_at DATE);", "exampleSqlTarget": "CREATE TABLE t (created_at TIMESTAMP);"
+    },
+    {
+      "code": "O2GD-DT-004", "name": "CLOB → CLOB", "category": "DATATYPE", "severity": "INFO", "patternType": "DATATYPE",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "CLOB", "replacementPattern": "CLOB",
+      "description": "GaussDB 支持 CLOB 类型",
+      "exampleSqlSource": "CREATE TABLE t (content CLOB);", "exampleSqlTarget": "CREATE TABLE t (content CLOB);"
+    },
+    {
+      "code": "O2GD-PL-001", "name": "CREATE OR REPLACE → CREATE OR REPLACE", "category": "DDL", "severity": "INFO", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "CREATE OR REPLACE PROCEDURE", "replacementPattern": "CREATE OR REPLACE PROCEDURE",
+      "description": "GaussDB 兼容 CREATE OR REPLACE 语法（Oracle 兼容模式）",
+      "exampleSqlSource": "CREATE OR REPLACE PROCEDURE p1 AS BEGIN NULL; END;", "exampleSqlTarget": "CREATE OR REPLACE PROCEDURE p1 AS BEGIN NULL; END;"
+    },
+    {
+      "code": "O2GD-PL-002", "name": "PACKAGE → 拆分/SCHEMA", "category": "DDL", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "CREATE OR REPLACE PACKAGE", "replacementPattern": "",
+      "description": "GaussDB 不直接支持 Oracle PACKAGE（包），需拆分为独立的函数/存储过程，或使用 SCHEMA 组织",
+      "exampleSqlSource": "CREATE OR REPLACE PACKAGE pkg1 AS FUNCTION f1 RETURN NUMBER; END pkg1;", "exampleSqlTarget": "CREATE OR REPLACE FUNCTION f1() RETURNS NUMERIC AS $$ BEGIN RETURN 1; END; $$ LANGUAGE plpgsql;"
+    },
+    {
+      "code": "O2GD-PL-003", "name": "AUTHID CURRENT_USER → SECURITY DEFINER/INVOKER", "category": "DDL", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "AUTHID CURRENT_USER", "replacementPattern": "SECURITY INVOKER",
+      "description": "Oracle AUTHID CURRENT_USER 对应 GaussDB SECURITY INVOKER，AUTHID DEFINER 对应 SECURITY DEFINER",
+      "exampleSqlSource": "CREATE OR REPLACE PROCEDURE p1 AUTHID CURRENT_USER AS BEGIN NULL; END;", "exampleSqlTarget": "CREATE OR REPLACE PROCEDURE p1() SECURITY INVOKER AS $$ BEGIN NULL; END; $$ LANGUAGE plpgsql;"
+    },
+    {
+      "code": "O2GD-PL-004", "name": "EXCEPTION → EXCEPTION", "category": "DDL", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "EXCEPTION WHEN ${name} THEN", "replacementPattern": "EXCEPTION WHEN ${name} THEN",
+      "description": "GaussDB 支持 PL/pgSQL 异常处理，但异常名不同（如 NO_DATA_FOUND → NO_DATA_FOUND）",
+      "exampleSqlSource": "EXCEPTION WHEN NO_DATA_FOUND THEN RETURN NULL;", "exampleSqlTarget": "EXCEPTION WHEN NO_DATA_FOUND THEN RETURN NULL;"
+    },
+    {
+      "code": "O2GD-DDL-001", "name": "TABLESPACE → TABLESPACE", "category": "DDL", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "TABLESPACE ${name}", "replacementPattern": "TABLESPACE ${name}",
+      "description": "GaussDB 支持 TABLESPACE，但表空间管理方式不同于 Oracle",
+      "exampleSqlSource": "CREATE TABLE t (id INT) TABLESPACE users;", "exampleSqlTarget": "CREATE TABLE t (id INT) TABLESPACE users;"
+    },
+    {
+      "code": "O2GD-DDL-002", "name": "STORAGE → 移除", "category": "DDL", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "STORAGE (${params})", "replacementPattern": "",
+      "description": "Oracle STORAGE 存储参数 GaussDB 不支持，需移除",
+      "exampleSqlSource": "CREATE TABLE t (id INT) STORAGE (INITIAL 64K);", "exampleSqlTarget": "CREATE TABLE t (id INT);"
+    },
+    {
+      "code": "O2GD-DDL-003", "name": "SYNONYM → SYNONYM", "category": "DDL", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "CREATE OR REPLACE SYNONYM", "replacementPattern": "CREATE OR REPLACE SYNONYM",
+      "description": "GaussDB Oracle 兼容模式支持同义词 SYNONYM",
+      "exampleSqlSource": "CREATE OR REPLACE SYNONYM syn1 FOR schema1.table1;", "exampleSqlTarget": "CREATE OR REPLACE SYNONYM syn1 FOR schema1.table1;"
+    },
+    {
+      "code": "O2GD-DDL-004", "name": "DBLINK → DBLINK/FDW", "category": "DDL", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "GAUSSDB",
+      "matchPattern": "CREATE DATABASE LINK", "replacementPattern": "CREATE FOREIGN DATA WRAPPER",
+      "description": "Oracle DBLINK 需替换为 GaussDB 的 Foreign Data Wrapper (FDW)，语法和配置方式完全不同",
+      "exampleSqlSource": "CREATE DATABASE LINK remote CONNECT TO user IDENTIFIED BY pass USING 'tns';", "exampleSqlTarget": "CREATE SERVER remote FOREIGN DATA WRAPPER postgres_fdw OPTIONS (host 'remote', dbname 'mydb');"
+    }
+  ]
+}

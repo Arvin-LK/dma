@@ -148,6 +148,7 @@ public class DatabaseScanService {
         return switch (dbType) {
             case MYSQL -> String.format("jdbc:mysql://%s:%d/%s?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC", host, port, database);
             case ORACLE -> String.format("jdbc:oracle:thin:@%s:%d:%s", host, port, database);
+            case SQLSERVER -> String.format("jdbc:sqlserver://%s:%d;databaseName=%s;encrypt=false;trustServerCertificate=true", host, port, database);
             case POSTGRESQL -> String.format("jdbc:postgresql://%s:%d/%s", host, port, database);
             case DAMENG -> String.format("jdbc:dm://%s:%d/%s", host, port, database);
             default -> throw new UnsupportedOperationException("Unknown JDBC URL for: " + dbType);
@@ -237,6 +238,15 @@ public class DatabaseScanService {
                              "SELECT schema_name FROM information_schema.schemata " +
                              "WHERE schema_name NOT IN ('pg_catalog','information_schema') " +
                              "ORDER BY schema_name")) {
+                        while (rs.next()) schemas.add(rs.getString(1));
+                    }
+                    yield schemas;
+                }
+                case SQLSERVER -> {
+                    List<String> schemas = new ArrayList<>();
+                    try (Statement stmt = conn.createStatement();
+                         ResultSet rs = stmt.executeQuery(
+                             "SELECT name FROM sys.schemas WHERE name NOT IN ('sys','INFORMATION_SCHEMA','guest','db_owner','db_accessadmin','db_securityadmin','db_ddladmin','db_backupoperator','db_datareader','db_datawriter','db_denydatareader','db_denydatawriter') ORDER BY name")) {
                         while (rs.next()) schemas.add(rs.getString(1));
                     }
                     yield schemas;

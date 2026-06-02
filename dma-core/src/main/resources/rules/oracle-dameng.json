@@ -1,0 +1,221 @@
+{
+  "meta": {
+    "sourceDb": "ORACLE",
+    "targetDb": "DAMENG",
+    "version": "1.0.0",
+    "description": "Oracle 到达梦 DM8 迁移兼容性规则集 — 达梦高度兼容 Oracle 语法，但仍有部分差异需适配",
+    "author": "DMA Team"
+  },
+  "rules": [
+    {
+      "code": "O2DM-FN-001", "name": "NVL 兼容", "category": "BUILTIN_FUNCTION", "severity": "INFO", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "NVL(${expr1}, ${expr2})", "replacementPattern": "NVL(${expr1}, ${expr2})",
+      "description": "Oracle NVL 在达梦中直接兼容，无需修改",
+      "exampleSqlSource": "SELECT NVL(name, 'N/A') FROM users;", "exampleSqlTarget": "SELECT NVL(name, 'N/A') FROM users;"
+    },
+    {
+      "code": "O2DM-FN-002", "name": "DECODE → CASE/DECODE", "category": "BUILTIN_FUNCTION", "severity": "INFO", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "DECODE(${expr}, ${search}, ${result})", "replacementPattern": "DECODE(${expr}, ${search}, ${result})",
+      "description": "Oracle DECODE 在达梦中直接兼容，无需修改",
+      "exampleSqlSource": "SELECT DECODE(status, 1, 'Active', 'Inactive') FROM users;", "exampleSqlTarget": "SELECT DECODE(status, 1, 'Active', 'Inactive') FROM users;"
+    },
+    {
+      "code": "O2DM-FN-003", "name": "SYSDATE 兼容", "category": "BUILTIN_FUNCTION", "severity": "INFO", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "SYSDATE", "replacementPattern": "SYSDATE",
+      "description": "Oracle SYSDATE 在达梦中直接兼容",
+      "exampleSqlSource": "SELECT SYSDATE FROM dual;", "exampleSqlTarget": "SELECT SYSDATE FROM dual;"
+    },
+    {
+      "code": "O2DM-FN-004", "name": "TO_DATE → TO_DATE", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "TO_DATE(${str}, ${fmt})", "replacementPattern": "TO_DATE(${str}, ${fmt})",
+      "description": "Oracle TO_DATE 在达梦中兼容，但部分日期格式码有差异（如 Oracle FF→达梦 FF）",
+      "exampleSqlSource": "SELECT TO_DATE('2024-01-01', 'YYYY-MM-DD') FROM dual;", "exampleSqlTarget": "SELECT TO_DATE('2024-01-01', 'YYYY-MM-DD') FROM dual;"
+    },
+    {
+      "code": "O2DM-FN-005", "name": "TO_CHAR → TO_CHAR", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "TO_CHAR(${expr})", "replacementPattern": "TO_CHAR(${expr})",
+      "description": "Oracle TO_CHAR 在达梦中兼容，但部分格式码有差异",
+      "exampleSqlSource": "SELECT TO_CHAR(SYSDATE, 'YYYY-MM-DD') FROM dual;", "exampleSqlTarget": "SELECT TO_CHAR(SYSDATE, 'YYYY-MM-DD') FROM dual;"
+    },
+    {
+      "code": "O2DM-FN-006", "name": "TO_TIMESTAMP → TO_TIMESTAMP", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "TO_TIMESTAMP(${str}, ${fmt})", "replacementPattern": "TO_TIMESTAMP(${str}, ${fmt})",
+      "description": "Oracle TO_TIMESTAMP 在达梦中兼容",
+      "exampleSqlSource": "SELECT TO_TIMESTAMP('2024-01-01', 'YYYY-MM-DD') FROM dual;", "exampleSqlTarget": "SELECT TO_TIMESTAMP('2024-01-01', 'YYYY-MM-DD') FROM dual;"
+    },
+    {
+      "code": "O2DM-FN-007", "name": "WM_CONCAT → WM_CONCAT/LISTAGG", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "WM_CONCAT(${expr})", "replacementPattern": "WM_CONCAT(${expr})",
+      "description": "Oracle WM_CONCAT 达梦支持（Oracle 兼容模式），也可用 LISTAGG",
+      "exampleSqlSource": "SELECT WM_CONCAT(name) FROM users;", "exampleSqlTarget": "SELECT WM_CONCAT(name) FROM users;"
+    },
+    {
+      "code": "O2DM-FN-008", "name": "CONNECT BY → 递归 CTE", "category": "BUILTIN_FUNCTION", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "CONNECT BY", "replacementPattern": "WITH RECURSIVE",
+      "description": "Oracle CONNECT BY 层次查询，达梦兼容该语法（Oracle 兼容模式），否则需用 WITH RECURSIVE",
+      "exampleSqlSource": "SELECT * FROM tree START WITH pid IS NULL CONNECT BY PRIOR id=pid;", "exampleSqlTarget": "WITH RECURSIVE cte AS (SELECT * FROM tree WHERE pid IS NULL UNION ALL SELECT t.* FROM tree t JOIN cte ON t.pid=cte.id) SELECT * FROM cte;"
+    },
+    {
+      "code": "O2DM-FN-009", "name": "SUBSTR(负数) → 达梦行为差异", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "SUBSTR(${str}, ${start})", "replacementPattern": "SUBSTR(${str}, ${start})",
+      "description": "当 start 为负数时，达梦 SUBSTR 行为与 Oracle 略有不同，需检查验证",
+      "exampleSqlSource": "SELECT SUBSTR('hello', -2) FROM dual;", "exampleSqlTarget": "SELECT SUBSTR('hello', -2) FROM dual;"
+    },
+    {
+      "code": "O2DM-FN-010", "name": "TRUNC(日期) → TRUNC", "category": "BUILTIN_FUNCTION", "severity": "INFO", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "TRUNC(${date})", "replacementPattern": "TRUNC(${date})",
+      "description": "Oracle TRUNC(日期) 达梦支持（Oracle 兼容模式）",
+      "exampleSqlSource": "SELECT TRUNC(SYSDATE) FROM dual;", "exampleSqlTarget": "SELECT TRUNC(SYSDATE) FROM dual;"
+    },
+    {
+      "code": "O2DM-SYN-001", "name": "ROWNUM → ROWNUM/LIMIT", "category": "SYNTAX", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "ROWNUM", "replacementPattern": "ROWNUM",
+      "description": "Oracle ROWNUM 达梦在 Oracle 兼容模式下直接支持；非兼容模式推荐用 LIMIT",
+      "exampleSqlSource": "SELECT * FROM users WHERE ROWNUM <= 10;", "exampleSqlTarget": "SELECT * FROM users LIMIT 10;"
+    },
+    {
+      "code": "O2DM-SYN-002", "name": "SEQUENCE.NEXTVAL → SEQ.NEXTVAL", "category": "SYNTAX", "severity": "INFO", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "${seq}.NEXTVAL", "replacementPattern": "${seq}.NEXTVAL",
+      "description": "Oracle 序列 .NEXTVAL 在达梦中直接兼容",
+      "exampleSqlSource": "INSERT INTO t (id) VALUES (myseq.NEXTVAL);", "exampleSqlTarget": "INSERT INTO t (id) VALUES (myseq.NEXTVAL);"
+    },
+    {
+      "code": "O2DM-SYN-003", "name": "SEQUENCE.CURRVAL → SEQ.CURRVAL", "category": "SYNTAX", "severity": "INFO", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "${seq}.CURRVAL", "replacementPattern": "${seq}.CURRVAL",
+      "description": "Oracle 序列 .CURRVAL 在达梦中直接兼容",
+      "exampleSqlSource": "SELECT myseq.CURRVAL FROM dual;", "exampleSqlTarget": "SELECT myseq.CURRVAL FROM dual;"
+    },
+    {
+      "code": "O2DM-SYN-004", "name": "MERGE INTO 语法", "category": "SYNTAX", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "MERGE INTO", "replacementPattern": "MERGE INTO",
+      "description": "Oracle MERGE INTO 达梦支持，但部分高级子句（如 LOG ERRORS）需移除",
+      "exampleSqlSource": "MERGE INTO t USING dual ON (t.id=1) WHEN MATCHED THEN UPDATE SET name='A' WHEN NOT MATCHED THEN INSERT VALUES (1,'A');", "exampleSqlTarget": "MERGE INTO t USING dual ON (t.id=1) WHEN MATCHED THEN UPDATE SET name='A' WHEN NOT MATCHED THEN INSERT VALUES (1,'A');"
+    },
+    {
+      "code": "O2DM-SYN-005", "name": "VARCHAR2 → VARCHAR2", "category": "DATATYPE", "severity": "INFO", "patternType": "DATATYPE",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "VARCHAR2", "replacementPattern": "VARCHAR2",
+      "description": "达梦高度兼容 Oracle，VARCHAR2 类型直接支持",
+      "exampleSqlSource": "CREATE TABLE t (name VARCHAR2(100));", "exampleSqlTarget": "CREATE TABLE t (name VARCHAR2(100));"
+    },
+    {
+      "code": "O2DM-SYN-006", "name": "NUMBER → NUMBER", "category": "DATATYPE", "severity": "INFO", "patternType": "DATATYPE",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "NUMBER", "replacementPattern": "NUMBER",
+      "description": "达梦高度兼容 Oracle，NUMBER 类型直接支持",
+      "exampleSqlSource": "CREATE TABLE t (amount NUMBER(10,2));", "exampleSqlTarget": "CREATE TABLE t (amount NUMBER(10,2));"
+    },
+    {
+      "code": "O2DM-SYN-007", "name": "CLOB/BLOB → CLOB/BLOB", "category": "DATATYPE", "severity": "INFO", "patternType": "DATATYPE",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "CLOB", "replacementPattern": "CLOB",
+      "description": "达梦高度兼容 Oracle，CLOB/BLOB 类型直接支持",
+      "exampleSqlSource": "CREATE TABLE t (content CLOB);", "exampleSqlTarget": "CREATE TABLE t (content CLOB);"
+    },
+    {
+      "code": "O2DM-SYN-008", "name": "ROWID → ROWID", "category": "SYNTAX", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "ROWID", "replacementPattern": "ROWID",
+      "description": "达梦支持 ROWID 伪列，但存储格式与 Oracle 不同，依赖 ROWID 格式的代码需调整",
+      "exampleSqlSource": "SELECT ROWID, name FROM users;", "exampleSqlTarget": "SELECT ROWID, name FROM users;"
+    },
+    {
+      "code": "O2DM-PL-001", "name": "PL/SQL 基本语法 → DM PL/SQL", "category": "DDL", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "CREATE OR REPLACE PROCEDURE", "replacementPattern": "CREATE OR REPLACE PROCEDURE",
+      "description": "达梦 DMSQL 高度兼容 Oracle PL/SQL，基本语法相同，部分系统包有差异",
+      "exampleSqlSource": "CREATE OR REPLACE PROCEDURE p1 AS BEGIN NULL; END;", "exampleSqlTarget": "CREATE OR REPLACE PROCEDURE p1 AS BEGIN NULL; END;"
+    },
+    {
+      "code": "O2DM-PL-002", "name": "DBMS_OUTPUT → DBMS_OUTPUT", "category": "DDL", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "DBMS_OUTPUT.PUT_LINE(${msg})", "replacementPattern": "DBMS_OUTPUT.PUT_LINE(${msg})",
+      "description": "达梦提供 DBMS_OUTPUT 兼容包，但需确认达梦版本是否安装了该包",
+      "exampleSqlSource": "DBMS_OUTPUT.PUT_LINE('Hello');", "exampleSqlTarget": "DBMS_OUTPUT.PUT_LINE('Hello');"
+    },
+    {
+      "code": "O2DM-PL-003", "name": "UTL_FILE → UTL_FILE/DMFILE", "category": "DDL", "severity": "ERROR", "patternType": "FUNCTION",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "UTL_FILE", "replacementPattern": "",
+      "description": "Oracle UTL_FILE 达梦不直接兼容，需使用达梦 DMFILE 包替代",
+      "exampleSqlSource": "UTL_FILE.FOPEN('/tmp', 'log.txt', 'w');", "exampleSqlTarget": "-- 使用达梦 DMFILE 包替代 UTL_FILE"
+    },
+    {
+      "code": "O2DM-PL-004", "name": "AUTHID CURRENT_USER → 兼容", "category": "DDL", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "AUTHID CURRENT_USER", "replacementPattern": "",
+      "description": "Oracle AUTHID CURRENT_USER（调用者权限）达梦不完全支持，需检查并可能需要移除",
+      "exampleSqlSource": "CREATE OR REPLACE PROCEDURE p1 AUTHID CURRENT_USER AS BEGIN NULL; END;", "exampleSqlTarget": "CREATE OR REPLACE PROCEDURE p1 AS BEGIN NULL; END;"
+    },
+    {
+      "code": "O2DM-PL-005", "name": "PRAGMA AUTONOMOUS_TRANSACTION → 兼容", "category": "DDL", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "PRAGMA AUTONOMOUS_TRANSACTION", "replacementPattern": "PRAGMA AUTONOMOUS_TRANSACTION",
+      "description": "达梦支持 PRAGMA AUTONOMOUS_TRANSACTION 自治事务（Oracle 兼容模式）",
+      "exampleSqlSource": "PRAGMA AUTONOMOUS_TRANSACTION;", "exampleSqlTarget": "PRAGMA AUTONOMOUS_TRANSACTION;"
+    },
+    {
+      "code": "O2DM-PL-006", "name": "BULK COLLECT → BULK COLLECT", "category": "DDL", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "BULK COLLECT", "replacementPattern": "BULK COLLECT",
+      "description": "达梦支持 BULK COLLECT 批量操作语法",
+      "exampleSqlSource": "SELECT * BULK COLLECT INTO v_arr FROM t;", "exampleSqlTarget": "SELECT * BULK COLLECT INTO v_arr FROM t;"
+    },
+    {
+      "code": "O2DM-DDL-001", "name": "CREATE TABLE AS → CREATE TABLE AS", "category": "DDL", "severity": "INFO", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "CREATE TABLE ${table} AS", "replacementPattern": "CREATE TABLE ${table} AS",
+      "description": "Oracle CREATE TABLE AS SELECT 达梦直接兼容",
+      "exampleSqlSource": "CREATE TABLE t2 AS SELECT * FROM t1;", "exampleSqlTarget": "CREATE TABLE t2 AS SELECT * FROM t1;"
+    },
+    {
+      "code": "O2DM-DDL-002", "name": "TABLESPACE → 移除", "category": "DDL", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "TABLESPACE ${name}", "replacementPattern": "",
+      "description": "Oracle TABLESPACE 子句达梦支持但语义不同，建议移除使用默认表空间",
+      "exampleSqlSource": "CREATE TABLE t (id INT) TABLESPACE users;", "exampleSqlTarget": "CREATE TABLE t (id INT);"
+    },
+    {
+      "code": "O2DM-DDL-003", "name": "STORAGE 子句 → 移除", "category": "DDL", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "STORAGE (${params})", "replacementPattern": "",
+      "description": "Oracle STORAGE 存储子句达梦不支持，需移除",
+      "exampleSqlSource": "CREATE TABLE t (id INT) STORAGE (INITIAL 64K);", "exampleSqlTarget": "CREATE TABLE t (id INT);"
+    },
+    {
+      "code": "O2DM-DDL-004", "name": "PCTFREE/PCTUSED → 移除", "category": "DDL", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "PCTFREE ${n}", "replacementPattern": "",
+      "description": "Oracle PCTFREE/PCTUSED 存储参数达梦不支持，需移除",
+      "exampleSqlSource": "CREATE TABLE t (id INT) PCTFREE 10;", "exampleSqlTarget": "CREATE TABLE t (id INT);"
+    },
+    {
+      "code": "O2DM-SYN-009", "name": "DUAL 表 → DUAL", "category": "SYNTAX", "severity": "INFO", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "FROM DUAL", "replacementPattern": "FROM DUAL",
+      "description": "Oracle DUAL 表现在达梦中存在，直接兼容",
+      "exampleSqlSource": "SELECT SYSDATE FROM DUAL;", "exampleSqlTarget": "SELECT SYSDATE FROM DUAL;"
+    },
+    {
+      "code": "O2DM-SYN-010", "name": "Hint 语法 → 达梦 Hint", "category": "SYNTAX", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "ORACLE", "targetDbType": "DAMENG",
+      "matchPattern": "/*+ ${hint} */", "replacementPattern": "/*+ ${hint} */",
+      "description": "Oracle 优化器提示达梦支持部分，部分 Hint 名称不同，需逐个验证",
+      "exampleSqlSource": "SELECT /*+ FULL(t) */ * FROM t;", "exampleSqlTarget": "SELECT /*+ FULL(t) */ * FROM t;"
+    }
+  ]
+}

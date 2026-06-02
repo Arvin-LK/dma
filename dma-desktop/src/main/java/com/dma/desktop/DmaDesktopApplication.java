@@ -19,51 +19,42 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * DMA 桌面端应用。
- * 包含两个核心页面：
- *   1. 数据库体检 — 连接源库，全面扫描兼容性
- *   2. SQL 转换 — 手动输入 SQL，查看转换建议
- */
 public class DmaDesktopApplication extends Application {
 
     private ConfigurableApplicationContext springContext;
     private HttpClient httpClient;
+    private Label statusLeft, statusConn, statusRules, statusApi;
+    private StackPane contentArea;
+    private Map<String, Button> navButtons = new LinkedHashMap<>();
+    private String currentPage = "dashboard";
 
-    // === 数据库体检页组件 ===
-    private TextField dbHostField, dbPortField, dbUserField, dbPasswordField;
-    private ComboBox<String> dbSchemaCombo, dbSourceCombo, dbTargetCombo;
-    private ComboBox<String> savedConnCombo;
-    private java.util.Map<String, java.util.Map<String, String>> savedConnections = new java.util.HashMap<>();
-    private TextArea dbResultArea;
-    private Label dbStatusLabel;
+    // 体检页
+    private TextField dbHost, dbPort, dbUser, dbPassword;
+    private ComboBox<String> dbSchema, dbSource, dbTarget, savedConn;
+    private TextArea dbResult;
     private ProgressIndicator dbProgress;
-
-    // === SQL 转换页组件 ===
-    private TextArea sqlInput;
-    private TextArea sqlResult;
-    private ComboBox<String> sqlSourceCombo, sqlTargetCombo;
-    private Label sqlStatusLabel;
-
-    // === 存储过程迁移页组件 ===
-    private TextArea spInput;
-    private TextArea spResult;
-    private ComboBox<String> spSourceCombo, spTargetCombo;
-    private Label spStatusLabel;
-
-    // === 项目源码扫描页组件 ===
-    private TextField projectPathField;
-    private ComboBox<String> projSourceCombo, projTargetCombo;
+    // SQL页
+    private TextArea sqlInput, sqlResult;
+    private ComboBox<String> sqlSource, sqlTarget;
+    // SP页
+    private TextArea spInput, spResult;
+    private ComboBox<String> spSource, spTarget;
+    // 项目页
+    private TextField projPath;
+    private ComboBox<String> projSource, projTarget;
     private TextArea projResult;
-    private Label projStatusLabel;
     private ProgressIndicator projProgress;
+    // AI页
+    private TextArea aiInput, aiResult;
+    private Label aiStatus;
+    // 连接缓存
+    private Map<String, Map<String, String>> savedConns = new HashMap<>();
 
-    public static void main(String[] args) {
-        launch(args);
-    }
+    public static void main(String[] args) { launch(args); }
 
     @Override
     public void init() {
@@ -73,1238 +64,558 @@ public class DmaDesktopApplication extends Application {
 
     @Override
     public void start(Stage stage) {
-        stage.setTitle("Database Migration Assistant (DMA) — v1.0");
-        stage.setWidth(1280);
-        stage.setHeight(860);
+        stage.setTitle("DMA — Database Migration Assistant");
+        stage.setWidth(1280); stage.setHeight(860);
+        stage.setMinWidth(1024); stage.setMinHeight(680);
 
-        TabPane tabPane = new TabPane();
+        BorderPane root = new BorderPane();
+        root.setLeft(buildSidebar());
+        root.setBottom(buildStatusbar());
+        contentArea = new StackPane();
+        contentArea.setStyle("-fx-background-color: #f1f5f9;");
+        contentArea.getChildren().add(buildDashboard());
+        root.setCenter(contentArea);
 
-        // Tab 1: 数据库体检
-        Tab dbScanTab = new Tab("数据库体检");
-        dbScanTab.setClosable(false);
-        dbScanTab.setContent(buildDatabaseScanPage());
-        // Tab 2: SQL 转换
-        Tab sqlTab = new Tab("SQL 转换");
-        sqlTab.setClosable(false);
-        sqlTab.setContent(buildSqlConvertPage());
-        // Tab 3: 存储过程迁移
-        Tab spTab = new Tab("存储过程迁移");
-        spTab.setClosable(false);
-        spTab.setContent(buildProcedurePage());
-        // Tab 4: 项目源码扫描
-        Tab projTab = new Tab("项目源码扫描");
-        projTab.setClosable(false);
-        projTab.setContent(buildProjectScanPage());
-        // Tab 5: AI 顾问
-        Tab aiTab = new Tab("AI 顾问");
-        aiTab.setClosable(false);
-        aiTab.setContent(buildAiPage());
-
-        tabPane.getTabs().addAll(dbScanTab, sqlTab, spTab, projTab, aiTab);
-        tabPane.getSelectionModel().select(0);
-
-        Scene scene = new Scene(tabPane);
+        Scene scene = new Scene(root);
         stage.setScene(scene);
         stage.show();
+
+        refreshStatus();
+        loadSavedConnections();
     }
 
-    // ==================== 数据库体检页面 ====================
+    // ==================== 侧边栏 ====================
+    private VBox buildSidebar() {
+        VBox sidebar = new VBox(0);
+        sidebar.setPrefWidth(210); sidebar.setMinWidth(210);
+        sidebar.setStyle("-fx-background-color: #1e293b;");
 
-    private VBox buildDatabaseScanPage() {
-        VBox root = new VBox(12);
-        root.setPadding(new Insets(16));
-        root.setStyle("-fx-background-color: #f8fafc;");
+        VBox logoBox = new VBox(6);
+        logoBox.setPadding(new Insets(20, 18, 16, 18));
+        logoBox.setStyle("-fx-background-color: #0f172a;");
+        Label logoTitle = new Label("DMA");
+        logoTitle.setFont(Font.font("System", FontWeight.BOLD, 22));
+        logoTitle.setTextFill(Color.WHITE);
+        Label logoSub = new Label("Database Migration Assistant");
+        logoSub.setFont(Font.font("System", 11));
+        logoSub.setTextFill(Color.valueOf("#94a3b8"));
+        logoBox.getChildren().addAll(logoTitle, logoSub);
+        sidebar.getChildren().add(logoBox);
 
-        // 标题
-        Label title = new Label("数据库兼容性体检");
-        title.setFont(Font.font("System", FontWeight.BOLD, 22));
-        title.setTextFill(Color.valueOf("#1e40af"));
+        String[][] items = {{"🏠", "首页概览", "dashboard"}, {"🏥", "数据库体检", "scan"}, {"🔄", "SQL 转换", "sql"},
+                {"📦", "存储过程迁移", "procedure"}, {"📂", "项目源码扫描", "project"}, {"🤖", "AI 顾问", "ai"}};
 
-        Label subtitle = new Label("连接源数据库，自动扫描所有对象的兼容性");
-        subtitle.setFont(Font.font("System", 14));
-        subtitle.setTextFill(Color.valueOf("#64748b"));
+        for (String[] item : items) {
+            Button btn = new Button(item[0] + "  " + item[1]);
+            btn.setMaxWidth(Double.MAX_VALUE);
+            btn.setAlignment(Pos.CENTER_LEFT);
+            btn.setPadding(new Insets(13, 22, 13, 22));
+            btn.setFont(Font.font("System", 14));
+            btn.setTextFill(Color.valueOf("#cbd5e1"));
+            btn.setStyle("-fx-background-color: transparent; -fx-border-width: 0; -fx-cursor: hand;");
 
-        // 已保存连接选择区
-        HBox savedRow = new HBox(8);
-        savedRow.setPadding(new Insets(8, 12, 8, 12));
-        savedRow.setStyle("-fx-background-color: #eff6ff; -fx-border-color: #bfdbfe; -fx-border-radius: 8; -fx-background-radius: 8;");
-        savedRow.setAlignment(Pos.CENTER_LEFT);
+            final String page = item[2];
+            btn.setOnMouseEntered(e -> { if (!page.equals(currentPage)) btn.setStyle("-fx-background-color: #334155; -fx-border-width: 0; -fx-cursor: hand;"); });
+            btn.setOnMouseExited(e -> { if (!page.equals(currentPage)) btn.setStyle("-fx-background-color: transparent; -fx-border-width: 0; -fx-cursor: hand;"); });
+            btn.setOnAction(e -> switchPage(page));
+            navButtons.put(page, btn);
+            sidebar.getChildren().add(btn);
+        }
 
-        savedConnCombo = new ComboBox<>();
-        savedConnCombo.setPrefWidth(280);
-        savedConnCombo.setPromptText("选择已保存的连接...");
-        savedConnCombo.setOnAction(e -> onSavedConnectionSelected());
-
-        Button refreshBtn = new Button("🔄 刷新");
-        refreshBtn.setStyle("-fx-background-color: #3b82f6; -fx-text-fill: white;");
-        refreshBtn.setOnAction(e -> loadSavedConnections());
-
-        Button saveBtn = new Button("💾 保存当前连接");
-        saveBtn.setStyle("-fx-background-color: #10b981; -fx-text-fill: white;");
-        saveBtn.setOnAction(e -> saveCurrentConnection());
-
-        Button deleteBtn = new Button("🗑 删除");
-        deleteBtn.setStyle("-fx-background-color: #ef4444; -fx-text-fill: white;");
-        deleteBtn.setOnAction(e -> deleteSavedConnection());
-
-        savedRow.getChildren().addAll(
-                new Label("已保存的连接:"), savedConnCombo, refreshBtn, saveBtn, deleteBtn
-        );
-
-        // 连接配置区
-        HBox connRow = new HBox(8);
-        connRow.setPadding(new Insets(12));
-        connRow.setStyle("-fx-background-color: white; -fx-border-color: #e2e8f0; -fx-border-radius: 8; -fx-background-radius: 8;");
-        connRow.setAlignment(Pos.CENTER_LEFT);
-
-        dbHostField = new TextField("localhost"); dbHostField.setPrefWidth(120); dbHostField.setPromptText("主机");
-        dbPortField = new TextField("3306"); dbPortField.setPrefWidth(70); dbPortField.setPromptText("端口");
-        dbUserField = new TextField("root"); dbUserField.setPrefWidth(100); dbUserField.setPromptText("用户名");
-        dbPasswordField = new PasswordField(); dbPasswordField.setPrefWidth(100); dbPasswordField.setPromptText("密码"); dbPasswordField.setText("");
-        dbSchemaCombo = new ComboBox<>();
-        dbSchemaCombo.setPrefWidth(160);
-        dbSchemaCombo.setPromptText("先连接后选择");
-        dbSchemaCombo.setEditable(false);
-
-        Button connectBtn = new Button("获取Schema");
-        connectBtn.setStyle("-fx-background-color: #0891b2; -fx-text-fill: white;");
-        connectBtn.setOnAction(e -> discoverSchemas());
-
-        connRow.getChildren().addAll(
-                new Label("主机:"), dbHostField,
-                new Label("端口:"), dbPortField,
-                new Label("用户:"), dbUserField,
-                new Label("密码:"), dbPasswordField,
-                connectBtn,
-                new Label("Schema:"), dbSchemaCombo
-        );
-
-        // 数据库类型选择 + 扫描按钮
-        HBox actionRow = new HBox(16);
-        actionRow.setAlignment(Pos.CENTER_LEFT);
-
-        dbSourceCombo = new ComboBox<>(FXCollections.observableArrayList(
-                "MYSQL", "ORACLE", "SQLSERVER"));
-        dbSourceCombo.setValue("MYSQL");
-        dbSourceCombo.setPrefWidth(140);
-
-        dbTargetCombo = new ComboBox<>(FXCollections.observableArrayList(
-                "POSTGRESQL", "DAMENG", "GAUSSDB", "OCEANBASE", "GOLDENDB"));
-        dbTargetCombo.setValue("POSTGRESQL");
-        dbTargetCombo.setPrefWidth(140);
-
-        Button scanBtn = new Button("开始扫描");
-        scanBtn.setStyle("-fx-background-color: #2563eb; -fx-text-fill: white; -fx-font-size: 16px; -fx-font-weight: bold; -fx-padding: 10 30;");
-        scanBtn.setOnAction(e -> runDatabaseScan());
-
-        Button exportDbBtn = new Button("📄 导出报告");
-        exportDbBtn.setStyle("-fx-background-color: #f59e0b; -fx-text-fill: white; -fx-padding: 8 16;");
-        exportDbBtn.setOnAction(e -> exportReport("数据库体检报告",
-                dbSourceCombo.getValue() + " → " + dbTargetCombo.getValue(),
-                dbResultArea.getText()));
-
-        dbProgress = new ProgressIndicator(-1);
-        dbProgress.setVisible(false);
-        dbProgress.setPrefSize(30, 30);
-
-        dbStatusLabel = new Label("就绪");
-        dbStatusLabel.setTextFill(Color.valueOf("#64748b"));
-
-        actionRow.getChildren().addAll(
-                new Label("源数据库:"), dbSourceCombo,
-                new Label("→ 目标数据库:"), dbTargetCombo,
-                scanBtn, exportDbBtn, dbProgress, dbStatusLabel
-        );
-
-        // 结果展示区
-        dbResultArea = new TextArea();
-        dbResultArea.setEditable(false);
-        dbResultArea.setPrefRowCount(24);
-        dbResultArea.setStyle("-fx-font-family: 'Consolas', 'Microsoft YaHei', monospace; -fx-font-size: 13px;");
-        dbResultArea.setPromptText("扫描结果将在此显示...");
-        VBox.setVgrow(dbResultArea, Priority.ALWAYS);
-
-        root.getChildren().addAll(title, subtitle, savedRow, connRow, actionRow, dbResultArea);
-        return root;
+        Region spacer = new Region(); VBox.setVgrow(spacer, Priority.ALWAYS);
+        sidebar.getChildren().add(spacer);
+        Label ver = new Label("v1.0.0");
+        ver.setFont(Font.font("System", 11)); ver.setTextFill(Color.valueOf("#475569"));
+        ver.setPadding(new Insets(12, 22, 12, 22));
+        sidebar.getChildren().add(ver);
+        return sidebar;
     }
 
-    /** 从服务器加载已保存的连接列表 */
-    private void loadSavedConnections() {
-        new Thread(() -> {
-            try {
-                HttpRequest req = HttpRequest.newBuilder()
-                        .uri(URI.create("http://localhost:8080/api/v1/connections?page=1&size=50"))
-                        .GET().build();
-                String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
-                Platform.runLater(() -> {
-                    savedConnections.clear();
-                    savedConnCombo.getItems().clear();
-                    // 按 JSON 对象分割（更稳健的方式）
-                    String[] objects = resp.split("\\},\\s*\\{");
-                    for (String obj : objects) {
-                        String name = extractJsonValue(obj, "name");
-                        String id = extractJsonValue(obj, "id"); // id is numeric
-                        if (id.isEmpty()) {
-                            // Try numeric id extraction
-                            java.util.regex.Matcher idm = java.util.regex.Pattern.compile("\"id\"\\s*:\\s*(\\d+)").matcher(obj);
-                            if (idm.find()) id = idm.group(1);
-                        }
-                        if (name != null && !name.isEmpty()) {
-                            savedConnCombo.getItems().add(name);
-                            java.util.Map<String, String> info = new java.util.HashMap<>();
-                            info.put("id", id);
-                            info.put("dbType", extractJsonValue(obj, "dbType"));
-                            info.put("host", extractJsonValue(obj, "host"));
-                            info.put("port", extractJsonValue(obj, "port"));
-                            info.put("username", extractJsonValue(obj, "username"));
-                            info.put("databaseName", extractJsonValue(obj, "databaseName"));
-                            savedConnections.put(name, info);
-                        }
-                    }
-                    dbStatusLabel.setText(savedConnections.isEmpty() ? "暂无已保存的连接" : "已加载 " + savedConnections.size() + " 个连接");
-                    if (!savedConnections.isEmpty()) dbStatusLabel.setTextFill(Color.valueOf("#16a34a"));
-                });
-            } catch (Exception e) {
-                Platform.runLater(() -> {
-                    dbStatusLabel.setText("加载连接失败: " + e.getMessage());
-                    dbStatusLabel.setTextFill(Color.valueOf("#dc2626"));
-                });
-            }
-        }).start();
-    }
-
-    /** 选中已保存的连接时自动填充字段 */
-    private void onSavedConnectionSelected() {
-        String name = savedConnCombo.getValue();
-        if (name == null || !savedConnections.containsKey(name)) return;
-        var info = savedConnections.get(name);
-        dbHostField.setText(info.getOrDefault("host", "localhost"));
-        dbPortField.setText(info.getOrDefault("port", "3306"));
-        dbUserField.setText(info.getOrDefault("username", "root"));
-        dbPasswordField.setText("");
-        dbSchemaCombo.getItems().clear();
-        dbSchemaCombo.setValue(info.getOrDefault("databaseName", ""));
-        dbSchemaCombo.setPromptText(info.getOrDefault("databaseName", ""));
-        // 设置源库类型
-        String dbType = info.getOrDefault("dbType", "MYSQL");
-        if (dbSourceCombo.getItems().contains(dbType)) dbSourceCombo.setValue(dbType);
-        dbStatusLabel.setText("已选择连接: " + name);
-        dbStatusLabel.setTextFill(Color.valueOf("#0891b2"));
-    }
-
-    /** 保存当前连接配置 */
-    private void saveCurrentConnection() {
-        String name = dbSchemaCombo.getValue() != null ? dbSchemaCombo.getValue() : (dbHostField.getText() + "_db");
-        // 弹出简易输入框
-        javafx.scene.control.TextInputDialog dialog = new javafx.scene.control.TextInputDialog(name);
-        dialog.setTitle("保存连接");
-        dialog.setHeaderText("给这个连接起个名字");
-        dialog.setContentText("连接名称:");
-        dialog.showAndWait().ifPresent(connName -> {
-            String jsonBody = String.format("""
-                {"name": "%s", "dbType": "%s", "host": "%s", "port": %s,
-                 "username": "%s", "password": "%s", "databaseName": "%s"}
-                """, escapeJson(connName), escapeJson(dbSourceCombo.getValue()),
-                escapeJson(dbHostField.getText()), escapeJson(dbPortField.getText()),
-                escapeJson(dbUserField.getText()), escapeJson(dbPasswordField.getText()),
-                escapeJson(dbSchemaCombo.getValue() != null ? dbSchemaCombo.getValue() : ""));
-            new Thread(() -> {
-                try {
-                    HttpRequest req = HttpRequest.newBuilder()
-                            .uri(URI.create("http://localhost:8080/api/v1/connections"))
-                            .header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString(jsonBody)).build();
-                    httpClient.send(req, HttpResponse.BodyHandlers.ofString());
-                    Platform.runLater(() -> {
-                        dbStatusLabel.setText("连接已保存: " + connName);
-                        dbStatusLabel.setTextFill(Color.valueOf("#16a34a"));
-                        loadSavedConnections();
-                    });
-                } catch (Exception ignored) {}
-            }).start();
+    private void switchPage(String page) {
+        currentPage = page;
+        navButtons.forEach((k, btn) -> btn.setStyle(k.equals(page)
+                ? "-fx-background-color: #2563eb; -fx-border-width: 0 0 0 3; -fx-border-color: #60a5fa; -fx-cursor: hand;"
+                : "-fx-background-color: transparent; -fx-border-width: 0; -fx-cursor: hand;"));
+        contentArea.getChildren().clear();
+        contentArea.getChildren().add(switch (page) {
+            case "scan" -> buildScanPage();
+            case "sql" -> buildSqlPage();
+            case "procedure" -> buildProcedurePage();
+            case "project" -> buildProjectPage();
+            case "ai" -> buildAiPage();
+            default -> buildDashboard();
         });
     }
 
-    /** 删除选中的已保存连接 */
-    private void deleteSavedConnection() {
-        String name = savedConnCombo.getValue();
-        if (name == null) return;
-        // 通过名称查找并删除
+    // ==================== 状态栏 ====================
+    private HBox buildStatusbar() {
+        HBox bar = new HBox(20);
+        bar.setPadding(new Insets(5, 18, 5, 18));
+        bar.setStyle("-fx-background-color: #e2e8f0; -fx-border-width: 1 0 0 0; -fx-border-color: #cbd5e1;");
+        bar.setAlignment(Pos.CENTER_LEFT);
+        statusLeft = lbl("就绪", 12, "#475569");
+        statusApi = lbl("API: --", 11, "#6366f1");
+        statusRules = lbl("规则: 138条", 11, "#059669");
+        statusConn = lbl("连接: --", 11, "#d97706");
+        Region sp = new Region(); HBox.setHgrow(sp, Priority.ALWAYS);
+        bar.getChildren().addAll(statusLeft, sp, statusApi, statusRules, statusConn);
+        return bar;
+    }
+
+    private void refreshStatus() {
         new Thread(() -> {
             try {
-                // 获取完整列表找到 ID
-                HttpRequest listReq = HttpRequest.newBuilder()
-                        .uri(URI.create("http://localhost:8080/api/v1/connections?page=1&size=50"))
-                        .GET().build();
-                String resp = httpClient.send(listReq, HttpResponse.BodyHandlers.ofString()).body();
-                // 简化：直接通过名称在列表中找到对应ID
-                Pattern p = Pattern.compile("\"name\":\"" + name + "\".*?\"id\":(\\d+)");
-                Matcher m = p.matcher(resp);
-                if (m.find()) {
-                    String id = m.group(1);
-                    HttpRequest delReq = HttpRequest.newBuilder()
-                            .uri(URI.create("http://localhost:8080/api/v1/connections/" + id))
-                            .DELETE().build();
-                    httpClient.send(delReq, HttpResponse.BodyHandlers.ofString());
-                    Platform.runLater(() -> {
-                        dbStatusLabel.setText("已删除: " + name);
-                        loadSavedConnections();
-                    });
-                }
+                HttpRequest req = HttpRequest.newBuilder().uri(URI.create("http://localhost:8080/api/v1/system/info")).GET().build();
+                httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+                Platform.runLater(() -> statusApi.setText("API: ✓ 8080"));
+            } catch (Exception e) { Platform.runLater(() -> statusApi.setText("API: ✗")); }
+        }).start();
+    }
+
+    // ==================== 首页 ====================
+    private ScrollPane buildDashboard() {
+        VBox root = new VBox(22);
+        root.setPadding(new Insets(28));
+        root.setStyle("-fx-background-color: #f1f5f9;");
+        root.getChildren().add(title("欢迎使用 Database Migration Assistant"));
+        root.getChildren().add(subtitle("数据库迁移与兼容性分析工具 — 支持 MySQL/Oracle/SQLServer → PG/GaussDB/达梦/OceanBase/GoldenDB"));
+
+        HBox cards = new HBox(16);
+        cards.getChildren().addAll(
+                statCard("138", "兼容性规则", "#2563eb"),
+                statCard("5", "迁移路径", "#7c3aed"),
+                statCard("19/19", "测试通过", "#059669"),
+                statCard("3", "报告格式", "#d97706"));
+        root.getChildren().add(cards);
+
+        root.getChildren().add(titleSm("快捷功能"));
+        HBox quick = new HBox(12);
+        quick.getChildren().addAll(
+                quickCard("🏥", "数据库体检", "连接源库 · 全量扫描 · 兼容率", () -> switchPage("scan")),
+                quickCard("🔄", "SQL 转换", "粘贴SQL · 自动转换 · 语法对比", () -> switchPage("sql")),
+                quickCard("📦", "存储过程", "PROCEDURE/FUNCTION/TRIGGER/VIEW", () -> switchPage("procedure")),
+                quickCard("📂", "项目扫描", "源码扫描 · 风险分级 · 报告", () -> switchPage("project")));
+        root.getChildren().add(quick);
+
+        ScrollPane sp = new ScrollPane(root); sp.setFitToWidth(true);
+        sp.setStyle("-fx-background-color: #f1f5f9;");
+        return sp;
+    }
+
+    private VBox statCard(String val, String lab, String color) {
+        VBox c = new VBox(6); c.setPadding(new Insets(20)); c.setPrefWidth(200);
+        c.setStyle("-fx-background-color: white; -fx-background-radius: 10; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.05), 8, 0, 0, 2);");
+        Label v = new Label(val); v.setFont(Font.font("System", FontWeight.BOLD, 30)); v.setTextFill(Color.valueOf(color));
+        Label l = new Label(lab); l.setFont(Font.font("System", 13)); l.setTextFill(Color.valueOf("#64748b"));
+        c.getChildren().addAll(v, l); return c;
+    }
+
+    private VBox quickCard(String icon, String t, String desc, Runnable action) {
+        VBox c = new VBox(8); c.setPadding(new Insets(18)); c.setPrefWidth(190);
+        c.setStyle("-fx-background-color: white; -fx-background-radius: 10; -fx-cursor: hand; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.05), 8, 0, 0, 2);");
+        c.setOnMouseClicked(e -> action.run());
+        c.setOnMouseEntered(e -> c.setStyle("-fx-background-color: #eff6ff; -fx-background-radius: 10; -fx-cursor: hand;"));
+        c.setOnMouseExited(e -> c.setStyle("-fx-background-color: white; -fx-background-radius: 10; -fx-cursor: hand;"));
+        Label ic = new Label(icon); ic.setFont(Font.font(30));
+        Label tl = new Label(t); tl.setFont(Font.font("System", FontWeight.BOLD, 14));
+        Label ds = new Label(desc); ds.setFont(Font.font("System", 11)); ds.setTextFill(Color.valueOf("#64748b"));
+        c.getChildren().addAll(ic, tl, ds); return c;
+    }
+
+    // ==================== 体检页 ====================
+    private ScrollPane buildScanPage() {
+        VBox root = pageRoot("数据库兼容性体检", "连接源库 → 提取对象 → 分析兼容性 → 输出兼容率");
+
+        savedConn = cb(240, "选择已保存的连接...");
+        savedConn.setOnAction(e -> onConnSelected());
+        Button refreshBtn = sbtn("🔄 刷新", "#3b82f6"); refreshBtn.setOnAction(e -> loadSavedConnections());
+        Button saveBtn = sbtn("💾 保存", "#10b981"); saveBtn.setOnAction(e -> saveConn());
+        Button delBtn = sbtn("🗑 删除", "#ef4444"); delBtn.setOnAction(e -> deleteConn());
+        HBox savedRow = hbox(8, savedConn, refreshBtn, saveBtn, delBtn);
+        savedRow.setPadding(new Insets(8, 14, 8, 14));
+        savedRow.setStyle("-fx-background-color: #eff6ff; -fx-background-radius: 8;");
+
+        dbHost = tf("localhost", 130, "主机"); dbPort = tf("3306", 70, "端口");
+        dbUser = tf("root", 100, "用户名");
+        dbPassword = new PasswordField(); dbPassword.setPrefWidth(100); dbPassword.setPromptText("密码");
+        dbPassword.setStyle("-fx-background-radius: 4; -fx-border-radius: 4; -fx-border-color: #d1d5db; -fx-padding: 6 10;");
+        dbSchema = cb(160, "先连接后选择");
+        dbSource = cbv(140, "MYSQL", "MYSQL", "ORACLE", "SQLSERVER");
+        dbTarget = cbv(140, "POSTGRESQL", "POSTGRESQL", "DAMENG", "GAUSSDB", "OCEANBASE", "GOLDENDB");
+        Button connectBtn = sbtn("获取Schema", "#0891b2"); connectBtn.setOnAction(e -> discoverSchemas());
+
+        HBox connRow = hbox(8, lbl("主机:"), dbHost, lbl("端口:"), dbPort, lbl("用户:"), dbUser,
+                lbl("密码:"), dbPassword, connectBtn, lbl("Schema:"), dbSchema);
+        connRow.setPadding(new Insets(8, 14, 8, 14));
+        connRow.setStyle("-fx-background-color: white; -fx-background-radius: 8; -fx-border-color: #e2e8f0; -fx-border-radius: 8;");
+
+        dbProgress = new ProgressIndicator(-1); dbProgress.setVisible(false); dbProgress.setPrefSize(24, 24);
+        Button scanBtn = bbtn("🔍 开始扫描", "#2563eb"); scanBtn.setOnAction(e -> runDbScan());
+        Button exportBtn = sbtn("📄 导出", "#f59e0b");
+        exportBtn.setOnAction(e -> exportReport("数据库体检报告", dbSource.getValue() + " → " + dbTarget.getValue(), dbResult.getText()));
+
+        HBox act = hbox(16, lbl("源:"), dbSource, lbl("目标:"), dbTarget, scanBtn, exportBtn, dbProgress);
+
+        dbResult = ta(20, "扫描结果将在此显示...");
+        VBox.setVgrow(dbResult, Priority.ALWAYS);
+        root.getChildren().addAll(savedRow, connRow, act, dbResult);
+        return wrap(root);
+    }
+
+    // ==================== SQL页 ====================
+    private ScrollPane buildSqlPage() {
+        VBox root = pageRoot("SQL 兼容性转换", "输入 SQL → 规则引擎匹配 → 自动转换 → 原SQL/新SQL对比");
+        sqlSource = cbv(130, "MYSQL", "MYSQL", "ORACLE", "SQLSERVER");
+        sqlTarget = cbv(140, "POSTGRESQL", "POSTGRESQL", "DAMENG", "GAUSSDB", "OCEANBASE", "GOLDENDB");
+        Button scanBtn = bbtn("🔍 扫描 SQL", "#2563eb"); scanBtn.setOnAction(e -> runSqlConvert());
+        Button exportBtn = sbtn("📄 导出", "#f59e0b");
+        exportBtn.setOnAction(e -> exportReport("SQL 转换报告", sqlSource.getValue() + " → " + sqlTarget.getValue(), sqlResult.getText()));
+        HBox row = hbox(12, lbl("源:"), sqlSource, lbl("目标:"), sqlTarget, scanBtn, exportBtn);
+
+        sqlInput = ta(9, "输入 SQL 语句...\n\n例: SELECT IFNULL(name, '') FROM users LIMIT 0, 10;");
+        sqlResult = ta(13, "转换结果将显示在此...");
+        SplitPane split = splitV(sqlInput, sqlResult, 0.38);
+        root.getChildren().addAll(row, split); VBox.setVgrow(split, Priority.ALWAYS);
+        return wrap(root);
+    }
+
+    // ==================== 存储过程页 ====================
+    private ScrollPane buildProcedurePage() {
+        VBox root = pageRoot("存储过程迁移", "粘贴 PROCEDURE/FUNCTION/TRIGGER/VIEW → 自动转换语法");
+        spSource = cbv(130, "MYSQL", "MYSQL", "ORACLE", "SQLSERVER");
+        spTarget = cbv(140, "GAUSSDB", "GAUSSDB", "POSTGRESQL", "DAMENG", "OCEANBASE", "GOLDENDB");
+        Button convBtn = bbtn("🔄 转换", "#7c3aed"); convBtn.setOnAction(e -> runProcedureConvert());
+        HBox row = hbox(12, lbl("源:"), spSource, lbl("目标:"), spTarget, convBtn);
+        spInput = ta(11, "粘贴 CREATE PROCEDURE/FUNCTION/TRIGGER/VIEW ...");
+        spResult = ta(13, "转换结果将显示在此...");
+        SplitPane split = splitV(spInput, spResult, 0.42);
+        root.getChildren().addAll(row, split); VBox.setVgrow(split, Priority.ALWAYS);
+        return wrap(root);
+    }
+
+    // ==================== 项目扫描页 ====================
+    private ScrollPane buildProjectPage() {
+        VBox root = pageRoot("项目源码扫描", "扫描整个项目目录: Java/XML/SQL → 风险分级统计");
+        projPath = tf(System.getProperty("user.dir"), 420, "项目根目录");
+        projSource = cbv(120, "MYSQL", "MYSQL", "ORACLE", "SQLSERVER");
+        projTarget = cbv(130, "POSTGRESQL", "POSTGRESQL", "DAMENG", "GAUSSDB", "OCEANBASE", "GOLDENDB");
+        projProgress = new ProgressIndicator(-1); projProgress.setVisible(false); projProgress.setPrefSize(24, 24);
+        Button scanBtn = bbtn("🔍 开始扫描", "#059669"); scanBtn.setOnAction(e -> runProjectScan());
+        Button exportBtn = sbtn("📄 导出", "#f59e0b");
+        exportBtn.setOnAction(e -> exportReport("项目源码扫描报告", projSource.getValue() + " → " + projTarget.getValue(), projResult.getText()));
+        HBox row = hbox(12, lbl("路径:"), projPath, lbl("源:"), projSource, lbl("目标:"), projTarget, scanBtn, exportBtn, projProgress);
+        projResult = ta(20, "扫描结果将在此显示...");
+        VBox.setVgrow(projResult, Priority.ALWAYS);
+        root.getChildren().addAll(row, projResult);
+        return wrap(root);
+    }
+
+    // ==================== AI页 ====================
+    private ScrollPane buildAiPage() {
+        VBox root = pageRoot("AI 迁移顾问", "本地 Ollama / 云端 OpenAI / 通义千问 / DeepSeek 多模式支持");
+        aiStatus = lbl("检查 AI 服务...", 13, "#64748b");
+        Button checkBtn = sbtn("🔄 检查状态", "#3b82f6"); checkBtn.setOnAction(e -> checkAiStatus());
+        Button askBtn = bbtn("💡 AI 分析", "#7c3aed"); askBtn.setOnAction(e -> askAi());
+        HBox row = hbox(12, aiStatus, checkBtn, askBtn);
+        aiInput = ta(8, "粘贴 SQL 或描述迁移问题...\n\n配置: application.yml → dma.ai.provider=ollama|openai|custom");
+        aiResult = ta(14, "AI 回复将显示在此..."); aiResult.setEditable(false);
+        SplitPane split = splitV(aiInput, aiResult, 0.32);
+        root.getChildren().addAll(row, split); VBox.setVgrow(split, Priority.ALWAYS);
+        return wrap(root);
+    }
+
+    // ==================== 业务逻辑 ====================
+    private void loadSavedConnections() {
+        new Thread(() -> {
+            try {
+                HttpRequest req = HttpRequest.newBuilder().uri(URI.create("http://localhost:8080/api/v1/connections?page=1&size=50")).GET().build();
+                String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
+                Platform.runLater(() -> {
+                    savedConns.clear(); if (savedConn != null) savedConn.getItems().clear();
+                    for (String obj : resp.split("\\},\\s*\\{")) {
+                        String name = ej(obj, "name"); if (name.isEmpty()) continue;
+                        if (savedConn != null) savedConn.getItems().add(name);
+                        Map<String, String> info = new HashMap<>();
+                        info.put("id", ej(obj, "id")); info.put("dbType", ej(obj, "dbType"));
+                        info.put("host", ej(obj, "host")); info.put("port", ej(obj, "port"));
+                        info.put("username", ej(obj, "username")); info.put("databaseName", ej(obj, "databaseName"));
+                        savedConns.put(name, info);
+                    }
+                    statusConn.setText("连接: " + savedConns.size() + "个");
+                });
             } catch (Exception ignored) {}
         }).start();
     }
 
-    /** 连接数据库并获取可用 Schema 列表 */
+    private void onConnSelected() {
+        if (savedConn == null || savedConn.getValue() == null) return;
+        Map<String, String> info = savedConns.get(savedConn.getValue());
+        if (info == null) return;
+        dbHost.setText(info.getOrDefault("host", "localhost"));
+        dbPort.setText(info.getOrDefault("port", "3306"));
+        dbUser.setText(info.getOrDefault("username", "root"));
+        dbPassword.setText("");
+        String dbType = info.getOrDefault("dbType", "MYSQL");
+        if (dbSource.getItems().contains(dbType)) dbSource.setValue(dbType);
+        statusLeft.setText("已选择: " + savedConn.getValue());
+    }
+
+    private void saveConn() {
+        String name = dbSchema.getValue() != null ? dbSchema.getValue() : (dbHost.getText() + "_db");
+        TextInputDialog d = new TextInputDialog(name);
+        d.setTitle("保存连接"); d.setHeaderText("给连接命名");
+        d.showAndWait().ifPresent(n -> new Thread(() -> {
+            try {
+                String body = String.format("""
+{"name":"%s","dbType":"%s","host":"%s","port":%s,"username":"%s","password":"%s","databaseName":"%s"}""",
+                        esc(n), esc(dbSource.getValue()), esc(dbHost.getText()), esc(dbPort.getText()),
+                        esc(dbUser.getText()), esc(dbPassword.getText()), esc(dbSchema.getValue() != null ? dbSchema.getValue() : ""));
+                HttpRequest req = HttpRequest.newBuilder().uri(URI.create("http://localhost:8080/api/v1/connections"))
+                        .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
+                httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+                Platform.runLater(() -> { statusLeft.setText("已保存: " + n); loadSavedConnections(); });
+            } catch (Exception ignored) {}
+        }).start());
+    }
+
+    private void deleteConn() {
+        if (savedConn == null || savedConn.getValue() == null) return;
+        String name = savedConn.getValue();
+        String id = savedConns.containsKey(name) ? savedConns.get(name).get("id") : null;
+        if (id == null || id.isEmpty()) return;
+        new Thread(() -> {
+            try {
+                HttpRequest req = HttpRequest.newBuilder().uri(URI.create("http://localhost:8080/api/v1/connections/" + id)).DELETE().build();
+                httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+                Platform.runLater(() -> { statusLeft.setText("已删除: " + name); loadSavedConnections(); });
+            } catch (Exception ignored) {}
+        }).start();
+    }
+
     private void discoverSchemas() {
-        dbStatusLabel.setText("正在获取 Schema 列表...");
-        dbStatusLabel.setTextFill(Color.valueOf("#0891b2"));
-
-        String jsonBody = String.format("""
-            {
-                "host": "%s",
-                "port": %s,
-                "username": "%s",
-                "password": "%s",
-                "sourceDbType": "%s"
-            }
-            """,
-            escapeJson(dbHostField.getText()), escapeJson(dbPortField.getText()),
-            escapeJson(dbUserField.getText()), escapeJson(dbPasswordField.getText()),
-            escapeJson(dbSourceCombo.getValue())
-        );
-
+        statusLeft.setText("获取 Schema...");
         new Thread(() -> {
             try {
-                HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create("http://localhost:8080/api/v1/scan/schemas"))
-                        .header("Content-Type", "application/json")
-                        .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
-                        .build();
-
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-
+                String body = String.format("""
+{"host":"%s","port":%s,"username":"%s","password":"%s","sourceDbType":"%s"}""",
+                        esc(dbHost.getText()), esc(dbPort.getText()), esc(dbUser.getText()), esc(dbPassword.getText()), esc(dbSource.getValue()));
+                HttpRequest req = HttpRequest.newBuilder().uri(URI.create("http://localhost:8080/api/v1/scan/schemas"))
+                        .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
+                String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
                 Platform.runLater(() -> {
-                    if (response.statusCode() == 200) {
-                        String body = response.body();
-                        // 解析 JSON 数组
-                        java.util.List<String> schemas = new java.util.ArrayList<>();
-                        int idx = body.indexOf('[');
-                        if (idx >= 0) {
-                            String arr = body.substring(idx);
-                            java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"([^\"]+)\"")
-                                    .matcher(arr);
-                            while (m.find()) schemas.add(m.group(1));
-                        }
-                        dbSchemaCombo.getItems().setAll(schemas);
-                        if (!schemas.isEmpty()) {
-                            dbSchemaCombo.setValue(schemas.get(0));
-                            dbStatusLabel.setText("找到 " + schemas.size() + " 个 Schema ✓");
-                            dbStatusLabel.setTextFill(Color.valueOf("#16a34a"));
-                        } else {
-                            dbStatusLabel.setText("未找到可用 Schema");
-                            dbStatusLabel.setTextFill(Color.valueOf("#d97706"));
-                        }
-                    } else {
-                        dbStatusLabel.setText("连接失败 ✗");
-                        dbStatusLabel.setTextFill(Color.valueOf("#dc2626"));
-                        dbSchemaCombo.getItems().clear();
-                        dbSchemaCombo.setPromptText("连接失败，请检查配置");
-                    }
+                    List<String> schemas = new ArrayList<>();
+                    Matcher m = Pattern.compile("\"([^\"]+)\"").matcher(resp);
+                    while (m.find()) { String s = m.group(1); if (s.length() > 1 && !s.equals("data")) schemas.add(s); }
+                    dbSchema.getItems().setAll(schemas);
+                    if (!schemas.isEmpty()) dbSchema.setValue(schemas.get(0));
+                    statusLeft.setText("找到 " + schemas.size() + " 个 Schema");
                 });
-            } catch (Exception e) {
-                Platform.runLater(() -> {
-                    dbStatusLabel.setText("连接失败: " + e.getMessage());
-                    dbStatusLabel.setTextFill(Color.valueOf("#dc2626"));
-                    dbSchemaCombo.getItems().clear();
-                    dbSchemaCombo.setPromptText("无法连接");
-                });
-            }
+            } catch (Exception e) { Platform.runLater(() -> statusLeft.setText("连接失败: " + e.getMessage())); }
         }).start();
     }
 
-    private void runDatabaseScan() {
-        dbProgress.setVisible(true);
-        dbStatusLabel.setText("正在连接数据库...");
-        dbResultArea.clear();
-
-        String jsonBody = String.format("""
-            {
-                "host": "%s",
-                "port": %s,
-                "username": "%s",
-                "password": "%s",
-                "database": "%s",
-                "sourceDbType": "%s",
-                "targetDbType": "%s"
-            }
-            """,
-            escapeJson(dbHostField.getText()), escapeJson(dbPortField.getText()),
-            escapeJson(dbUserField.getText()), escapeJson(dbPasswordField.getText()),
-            escapeJson(dbSchemaCombo.getValue() != null ? dbSchemaCombo.getValue() : ""),
-            escapeJson(dbSourceCombo.getValue()), escapeJson(dbTargetCombo.getValue())
-        );
-
+    private void runDbScan() {
+        dbProgress.setVisible(true); statusLeft.setText("扫描中...");
         new Thread(() -> {
             try {
-                HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create("http://localhost:8080/api/v1/scan/database"))
-                        .header("Content-Type", "application/json")
-                        .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
-                        .build();
-
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-
-                Platform.runLater(() -> {
-                    dbProgress.setVisible(false);
-                    if (response.statusCode() == 200) {
-                        dbStatusLabel.setText("扫描完成 ✓");
-                        dbStatusLabel.setTextFill(Color.valueOf("#16a34a"));
-                        dbResultArea.setText(formatScanResult(response.body()));
-                    } else {
-                        dbStatusLabel.setText("扫描失败 ✗");
-                        dbStatusLabel.setTextFill(Color.valueOf("#dc2626"));
-                        dbResultArea.setText("HTTP " + response.statusCode() + "\n" + response.body());
-                    }
-                });
-            } catch (Exception e) {
-                Platform.runLater(() -> {
-                    dbProgress.setVisible(false);
-                    dbStatusLabel.setText("连接失败: " + e.getMessage());
-                    dbStatusLabel.setTextFill(Color.valueOf("#dc2626"));
-                    dbResultArea.setText("错误: " + e.getMessage()
-                            + "\n\n请确认:\n1. 数据库服务已启动\n2. 主机/端口/用户名/密码正确\n3. 网络连接正常");
-                });
-            }
+                String schema = dbSchema.getValue() != null ? dbSchema.getValue() : "";
+                String body = String.format("""
+{"host":"%s","port":%s,"username":"%s","password":"%s","database":"%s","sourceDbType":"%s","targetDbType":"%s"}""",
+                        esc(dbHost.getText()), esc(dbPort.getText()), esc(dbUser.getText()), esc(dbPassword.getText()),
+                        esc(schema), esc(dbSource.getValue()), esc(dbTarget.getValue()));
+                HttpRequest req = HttpRequest.newBuilder().uri(URI.create("http://localhost:8080/api/v1/scan/database"))
+                        .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
+                String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
+                Platform.runLater(() -> { dbProgress.setVisible(false); statusLeft.setText("扫描完成"); dbResult.setText(formatScan(resp)); });
+            } catch (Exception e) { Platform.runLater(() -> { dbProgress.setVisible(false); statusLeft.setText("失败"); }); }
         }).start();
     }
 
-    private String formatScanResult(String json) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("╔══════════════════════════════════════╗\n");
-        sb.append("║      DMA 数据库兼容性体检报告        ║\n");
-        sb.append("╚══════════════════════════════════════╝\n\n");
-
-        try {
-            String body = json;
-            if (json.contains("\"data\":")) {
-                body = json.substring(json.indexOf("\"data\":") + 7);
-                if (body.endsWith("}}")) body = body.substring(0, body.length() - 1);
-            }
-
-            String sourceDb = extractJsonValue(body, "sourceDbType");
-            String targetDb = extractJsonValue(body, "targetDbType");
-            String dbName = extractJsonValue(body, "databaseName");
-            int procCount = extractJsonInt(body, "storedProcedureCount");
-            int funcCount = extractJsonInt(body, "functionCount");
-            int tableCount = extractJsonInt(body, "tableCount");
-            int viewCount = extractJsonInt(body, "viewCount");
-            int totalObjects = extractJsonInt(body, "totalObjects");
-            int compatible = extractJsonInt(body, "compatibleCount");
-            int autoConvert = extractJsonInt(body, "autoConvertibleCount");
-            int manual = extractJsonInt(body, "manualReviewCount");
-            int incompatible = extractJsonInt(body, "incompatibleCount");
-            double rate = extractJsonDouble(body, "compatibilityRate");
-
-            sb.append(String.format("  数据库: %s (%s → %s)\n\n", dbName, sourceDb, targetDb));
-            sb.append("  ┌────────────────────────────────────┐\n");
-            sb.append(String.format("  │  存储过程: %-4d  函数: %-4d       │\n", procCount, funcCount));
-            sb.append(String.format("  │  表:       %-4d  视图:  %-4d       │\n", tableCount, viewCount));
-            sb.append(String.format("  │  总对象数: %d                        │\n", totalObjects));
-            sb.append("  └────────────────────────────────────┘\n\n");
-            sb.append("  ┌────────────────────────────────────┐\n");
-            sb.append(String.format("  │  ✓ 完全兼容:   %-4d               │\n", compatible));
-            sb.append(String.format("  │  ⚡ 可自动转换: %-4d               │\n", autoConvert));
-            sb.append(String.format("  │  ⚠ 需人工审核: %-4d               │\n", manual));
-            sb.append(String.format("  │  ✗ 不兼容:     %-4d               │\n", incompatible));
-            sb.append("  └────────────────────────────────────┘\n\n");
-            sb.append(String.format("  ★ 兼容率: %.1f%%\n\n", rate));
-
-            // 进度条
-            int barLen = 40;
-            int filled = (int) (rate / 100.0 * barLen);
-            sb.append("  [");
-            for (int i = 0; i < barLen; i++) {
-                sb.append(i < filled ? "█" : "░");
-            }
-            sb.append(String.format("] %.1f%%\n", rate));
-
-            // 列出有问题的对象
-            if (manual + incompatible > 0) {
-                sb.append("\n  ══════ 需关注的对象 ══════\n");
-                // Extract objects from JSON (simplified)
-                Pattern p = Pattern.compile("\"objectName\":\"([^\"]+)\".*?\"objectType\":\"([^\"]+)\".*?\"compatibilityLevel\":\"([^\"]+)\".*?\"severity\":\"([^\"]+)\"");
-                Matcher m = p.matcher(body);
-                int issueCount = 0;
-                while (m.find() && issueCount < 30) {
-                    String level = m.group(3);
-                    if (!"COMPATIBLE".equals(level)) {
-                        sb.append(String.format("  [%s] %s (%s) — %s\n",
-                                m.group(4), m.group(1), m.group(2), level));
-                        issueCount++;
-                    }
-                }
-            }
-        } catch (Exception e) {
-            sb.append("  (解析错误: ").append(e.getMessage()).append(")\n");
-            sb.append("\n  原始数据:\n").append(json);
-        }
-        return sb.toString();
-    }
-
-    // ==================== SQL 转换页面 ====================
-
-    private VBox buildSqlConvertPage() {
-        VBox root = new VBox(12);
-        root.setPadding(new Insets(16));
-        root.setStyle("-fx-background-color: #f8fafc;");
-
-        Label title = new Label("SQL 兼容性转换");
-        title.setFont(Font.font("System", FontWeight.BOLD, 22));
-        title.setTextFill(Color.valueOf("#1e40af"));
-
-        HBox selectorRow = new HBox(16);
-        selectorRow.setAlignment(Pos.CENTER_LEFT);
-        sqlSourceCombo = new ComboBox<>(FXCollections.observableArrayList("MYSQL", "ORACLE", "SQLSERVER"));
-        sqlSourceCombo.setValue("MYSQL"); sqlSourceCombo.setPrefWidth(140);
-        sqlTargetCombo = new ComboBox<>(FXCollections.observableArrayList("POSTGRESQL", "DAMENG", "GAUSSDB", "OCEANBASE", "GOLDENDB"));
-        sqlTargetCombo.setValue("POSTGRESQL"); sqlTargetCombo.setPrefWidth(140);
-
-        Button scanBtn = new Button("扫描 SQL");
-        scanBtn.setStyle("-fx-background-color: #2563eb; -fx-text-fill: white;");
-        scanBtn.setOnAction(e -> runSqlScan());
-
-        Button exportSqlBtn = new Button("📄 导出");
-        exportSqlBtn.setStyle("-fx-background-color: #f59e0b; -fx-text-fill: white;");
-        exportSqlBtn.setOnAction(e -> exportReport("SQL 转换报告",
-                sqlSourceCombo.getValue() + " → " + sqlTargetCombo.getValue(),
-                sqlResult.getText()));
-
-        sqlStatusLabel = new Label("");
-        selectorRow.getChildren().addAll(
-                new Label("源:"), sqlSourceCombo,
-                new Label("目标:"), sqlTargetCombo,
-                scanBtn, exportSqlBtn, sqlStatusLabel
-        );
-
-        sqlInput = new TextArea();
-        sqlInput.setPromptText("输入 SQL 语句...");
-        sqlInput.setPrefRowCount(10);
-        sqlInput.setStyle("-fx-font-family: 'Consolas', monospace; -fx-font-size: 13px;");
-
-        sqlResult = new TextArea();
-        sqlResult.setEditable(false);
-        sqlResult.setPrefRowCount(14);
-        sqlResult.setStyle("-fx-font-family: 'Consolas', monospace; -fx-font-size: 13px;");
-
-        SplitPane split = new SplitPane();
-        split.setOrientation(javafx.geometry.Orientation.VERTICAL);
-        split.getItems().addAll(sqlInput, sqlResult);
-        split.setDividerPosition(0, 0.38);
-        VBox.setVgrow(split, Priority.ALWAYS);
-
-        root.getChildren().addAll(title, selectorRow, split);
-        return root;
-    }
-
-    // ==================== 存储过程迁移页面 ====================
-
-    private VBox buildProcedurePage() {
-        VBox root = new VBox(12);
-        root.setPadding(new Insets(16));
-        root.setStyle("-fx-background-color: #f8fafc;");
-
-        Label title = new Label("存储过程迁移");
-        title.setFont(Font.font("System", FontWeight.BOLD, 22));
-        title.setTextFill(Color.valueOf("#7c3aed"));
-
-        Label subtitle = new Label("粘贴 CREATE PROCEDURE / FUNCTION / TRIGGER / VIEW，自动转换为目标数据库语法");
-        subtitle.setFont(Font.font("System", 14));
-        subtitle.setTextFill(Color.valueOf("#64748b"));
-
-        HBox selectorRow = new HBox(16);
-        selectorRow.setAlignment(Pos.CENTER_LEFT);
-        spSourceCombo = new ComboBox<>(FXCollections.observableArrayList("MYSQL", "ORACLE", "SQLSERVER"));
-        spSourceCombo.setValue("MYSQL"); spSourceCombo.setPrefWidth(140);
-        spTargetCombo = new ComboBox<>(FXCollections.observableArrayList("GAUSSDB", "POSTGRESQL", "DAMENG", "OCEANBASE", "GOLDENDB"));
-        spTargetCombo.setValue("GAUSSDB"); spTargetCombo.setPrefWidth(140);
-
-        Button convertBtn = new Button("转换");
-        convertBtn.setStyle("-fx-background-color: #7c3aed; -fx-text-fill: white; -fx-font-size: 14px; -fx-font-weight: bold; -fx-padding: 8 24;");
-        convertBtn.setOnAction(e -> runProcedureConvert());
-
-        spStatusLabel = new Label("");
-        selectorRow.getChildren().addAll(
-                new Label("源:"), spSourceCombo,
-                new Label("目标:"), spTargetCombo,
-                convertBtn, spStatusLabel
-        );
-
-        // 输入区显示模板
-        spInput = new TextArea();
-        spInput.setText("""
-            -- 粘贴 MySQL 存储过程/函数/触发器/视图 DDL
-            -- 支持: PROCEDURE, FUNCTION, TRIGGER, VIEW
-
-            DELIMITER $$
-
-            CREATE PROCEDURE test_proc(IN p_id INT, OUT p_name VARCHAR(100))
-            BEGIN
-              SELECT IFNULL(name, '') INTO p_name FROM users WHERE id = p_id;
-            END
-
-            $$""");
-        spInput.setPrefRowCount(12);
-        spInput.setStyle("-fx-font-family: 'Consolas', monospace; -fx-font-size: 13px;");
-
-        spResult = new TextArea();
-        spResult.setEditable(false);
-        spResult.setPrefRowCount(14);
-        spResult.setStyle("-fx-font-family: 'Consolas', monospace; -fx-font-size: 13px;");
-
-        SplitPane split = new SplitPane();
-        split.setOrientation(javafx.geometry.Orientation.VERTICAL);
-        split.getItems().addAll(spInput, spResult);
-        split.setDividerPosition(0, 0.42);
-        VBox.setVgrow(split, Priority.ALWAYS);
-
-        root.getChildren().addAll(title, subtitle, selectorRow, split);
-        return root;
+    private void runSqlConvert() {
+        String sql = sqlInput.getText().trim(); if (sql.isEmpty()) return;
+        statusLeft.setText("转换中...");
+        new Thread(() -> {
+            try {
+                String body = String.format("""
+{"sql":"%s","sourceDbType":"%s","targetDbType":"%s"}""",
+                        esc(sql), esc(sqlSource.getValue()), esc(sqlTarget.getValue()));
+                HttpRequest req = HttpRequest.newBuilder().uri(URI.create("http://localhost:8080/api/v1/scan/sql"))
+                        .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
+                String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
+                Platform.runLater(() -> { statusLeft.setText("转换完成"); sqlResult.setText(formatSql(resp, sql)); });
+            } catch (Exception e) { Platform.runLater(() -> statusLeft.setText("失败")); }
+        }).start();
     }
 
     private void runProcedureConvert() {
-        String ddl = spInput.getText().trim();
-        if (ddl.isEmpty()) return;
-
-        spStatusLabel.setText("转换中...");
-        String jsonBody = String.format("""
-            {"ddl": "%s", "sourceDbType": "%s", "targetDbType": "%s"}
-            """, escapeJson(ddl), spSourceCombo.getValue(), spTargetCombo.getValue());
-
+        String ddl = spInput.getText().trim(); if (ddl.isEmpty()) return;
+        statusLeft.setText("转换中...");
         new Thread(() -> {
             try {
-                HttpRequest req = HttpRequest.newBuilder()
-                        .uri(URI.create("http://localhost:8080/api/v1/convert/procedure"))
-                        .header("Content-Type", "application/json")
-                        .POST(HttpRequest.BodyPublishers.ofString(jsonBody)).build();
+                String body = String.format("""
+{"ddl":"%s","sourceDbType":"%s","targetDbType":"%s"}""",
+                        esc(ddl), esc(spSource.getValue()), esc(spTarget.getValue()));
+                HttpRequest req = HttpRequest.newBuilder().uri(URI.create("http://localhost:8080/api/v1/convert/procedure"))
+                        .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
                 String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
-                Platform.runLater(() -> {
-                    spStatusLabel.setText("转换完成 ✓");
-                    spResult.setText(formatProcedureResult(resp));
-                });
-            } catch (Exception e) {
-                Platform.runLater(() -> {
-                    spStatusLabel.setText("失败: " + e.getMessage());
-                    spResult.setText("错误: " + e.getMessage());
-                });
-            }
+                Platform.runLater(() -> { statusLeft.setText("转换完成"); spResult.setText(formatSp(resp)); });
+            } catch (Exception e) { Platform.runLater(() -> statusLeft.setText("失败")); }
         }).start();
-    }
-
-    private String formatProcedureResult(String json) {
-        StringBuilder sb = new StringBuilder();
-        try {
-            String body = json;
-            int dataIdx = json.indexOf("\"data\":");
-            if (dataIdx >= 0) body = json.substring(dataIdx + 6);
-
-            String objType = extractJsonValue(body, "objectType");
-            String objName = extractJsonValue(body, "objectName");
-            String original = extractJsonValue(body, "originalDdl");
-            String converted = extractJsonValue(body, "convertedDdl");
-            String srcDb = extractJsonValue(body, "sourceDbType");
-            String tgtDb = extractJsonValue(body, "targetDbType");
-            int changeCount = extractJsonInt(body, "changeCount");
-
-            // 处理 escaped 字符
-            if (original.contains("\\n")) original = original.replace("\\n", "\n").replace("\\t", "    ");
-            if (converted.contains("\\n")) converted = converted.replace("\\n", "\n").replace("\\t", "    ");
-
-            String typeName = switch (objType) {
-                case "PROCEDURE" -> "存储过程";
-                case "FUNCTION" -> "函数";
-                case "TRIGGER" -> "触发器";
-                case "VIEW" -> "视图";
-                default -> objType;
-            };
-
-            sb.append("╔══════════════════════════════════════════════╗\n");
-            sb.append(String.format("║  %s 迁移: %s  →  %s\n", typeName, srcDb, tgtDb));
-            sb.append(String.format("║  对象: %s\n", objName));
-            sb.append("╚══════════════════════════════════════════════╝\n\n");
-
-            sb.append("  ━━━ 原 DDL (").append(srcDb).append(") ━━━\n\n");
-            sb.append(original).append("\n\n");
-
-            sb.append("        ↓↓↓ 转换后 ↓↓↓\n\n");
-
-            sb.append("  ━━━ 转换后 DDL (").append(tgtDb).append(") ━━━\n\n");
-            sb.append(converted).append("\n\n");
-
-            // 变更说明
-            if (changeCount > 0) {
-                sb.append("  ━━━ 变更说明 (").append(changeCount).append("项) ━━━\n\n");
-                // Parse changes array
-                Pattern changePat = Pattern.compile("\"([^\"]+)\"");
-                String changesStr = body;
-                int changesIdx = body.indexOf("\"changes\":");
-                if (changesIdx >= 0) {
-                    changesStr = body.substring(changesIdx);
-                    Matcher cm = changePat.matcher(changesStr);
-                    int num = 1;
-                    while (cm.find()) {
-                        String change = cm.group(1);
-                        if (!change.equals("changes") && change.length() > 2) {
-                            sb.append("  ").append(num++).append(". ").append(change).append("\n");
-                        }
-                    }
-                }
-            }
-
-            sb.append("\n══════════════════════════════════════════════\n");
-            sb.append(String.format("  %s 迁移完成 | 源: %s → 目标: %s\n", typeName, srcDb, tgtDb));
-
-        } catch (Exception e) {
-            sb.append("  格式化错误: ").append(e.getMessage()).append("\n");
-            sb.append("  ").append(json);
-        }
-        return sb.toString();
-    }
-
-    private void runSqlScan() {
-        String sql = sqlInput.getText().trim();
-        if (sql.isEmpty()) return;
-
-        sqlStatusLabel.setText("扫描中...");
-        String jsonBody = String.format("""
-            {"sql": "%s", "sourceDbType": "%s", "targetDbType": "%s"}
-            """, escapeJson(sql), sqlSourceCombo.getValue(), sqlTargetCombo.getValue());
-
-        new Thread(() -> {
-            try {
-                HttpRequest req = HttpRequest.newBuilder()
-                        .uri(URI.create("http://localhost:8080/api/v1/scan/sql"))
-                        .header("Content-Type", "application/json")
-                        .POST(HttpRequest.BodyPublishers.ofString(jsonBody)).build();
-                String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
-                Platform.runLater(() -> {
-                    sqlStatusLabel.setText("完成");
-                    sqlResult.setText(formatSqlConvertResult(resp, sql));
-                });
-            } catch (Exception e) {
-                Platform.runLater(() -> sqlStatusLabel.setText("失败: " + e.getMessage()));
-            }
-        }).start();
-    }
-
-    // ==================== AI 顾问页面 ====================
-
-    private Label aiStatusLabel;
-    private TextArea aiInput, aiOutput;
-
-    private VBox buildAiPage() {
-        VBox root = new VBox(12);
-        root.setPadding(new Insets(16));
-        root.setStyle("-fx-background-color: #f8fafc;");
-
-        Label title = new Label("AI 迁移顾问");
-        title.setFont(Font.font("System", FontWeight.BOLD, 22));
-        title.setTextFill(Color.valueOf("#7c3aed"));
-
-        Label subtitle = new Label("支持云端大模型（OpenAI/通义千问）和本地大模型（Ollama），AI 辅助分析迁移问题");
-        subtitle.setFont(Font.font("System", 14));
-        subtitle.setTextFill(Color.valueOf("#64748b"));
-
-        // 状态栏
-        HBox statusRow = new HBox(12);
-        statusRow.setAlignment(Pos.CENTER_LEFT);
-        aiStatusLabel = new Label("检查 AI 服务状态...");
-        Button checkBtn = new Button("🔄 检查状态");
-        checkBtn.setOnAction(e -> checkAiStatus());
-        Button adviceBtn = new Button("💡 分析建议");
-        adviceBtn.setStyle("-fx-background-color: #7c3aed; -fx-text-fill: white; -fx-padding: 8 16;");
-        adviceBtn.setOnAction(e -> askAiAdvice());
-        statusRow.getChildren().addAll(aiStatusLabel, checkBtn, adviceBtn);
-
-        // 输入
-        aiInput = new TextArea();
-        aiInput.setPromptText("在此粘贴 SQL 或描述迁移问题，AI 将给出专业建议...\n\n例如:\nSELECT IFNULL(name, '') FROM users LIMIT 0, 10;\n\n提示：先在 application.yml 中配置 dma.ai.provider");
-        aiInput.setPrefRowCount(8);
-        aiInput.setStyle("-fx-font-family: 'Consolas', monospace; -fx-font-size: 13px;");
-
-        // 输出
-        aiOutput = new TextArea();
-        aiOutput.setEditable(false);
-        aiOutput.setPrefRowCount(16);
-        aiOutput.setStyle("-fx-font-family: 'Microsoft YaHei', 'Consolas', sans-serif; -fx-font-size: 13px;");
-
-        SplitPane split = new SplitPane();
-        split.setOrientation(javafx.geometry.Orientation.VERTICAL);
-        split.getItems().addAll(aiInput, aiOutput);
-        split.setDividerPosition(0, 0.3);
-        VBox.setVgrow(split, Priority.ALWAYS);
-
-        root.getChildren().addAll(title, subtitle, statusRow, split);
-
-        // 启动时检查状态
-        checkAiStatus();
-        return root;
-    }
-
-    private void checkAiStatus() {
-        aiStatusLabel.setText("检查中...");
-        new Thread(() -> {
-            try {
-                HttpRequest req = HttpRequest.newBuilder()
-                        .uri(URI.create("http://localhost:8080/api/v1/ai/status"))
-                        .GET().build();
-                String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
-                Platform.runLater(() -> {
-                    if (resp.contains("\"available\":true")) {
-                        aiStatusLabel.setText("🤖 AI 已连接 | " + resp);
-                        aiStatusLabel.setTextFill(Color.valueOf("#16a34a"));
-                    } else {
-                        aiStatusLabel.setText("⚠ AI 未启用 | 请配置 application.yml");
-                        aiStatusLabel.setTextFill(Color.valueOf("#d97706"));
-                    }
-                });
-            } catch (Exception e) {
-                Platform.runLater(() -> {
-                    aiStatusLabel.setText("✗ 服务不可用");
-                    aiStatusLabel.setTextFill(Color.valueOf("#dc2626"));
-                });
-            }
-        }).start();
-    }
-
-    private void askAiAdvice() {
-        String input = aiInput.getText().trim();
-        if (input.isEmpty()) {
-            aiOutput.setText("请先输入需要分析的 SQL 或问题描述");
-            return;
-        }
-        aiOutput.setText("AI 思考中...");
-        new Thread(() -> {
-            try {
-                String json = String.format("""
-                    {"sourceSql": "%s", "message": "%s", "severity": "WARNING",
-                     "compatibilityLevel": "MANUAL_REVIEW", "ruleCode": "USER_ASK"}
-                    """, escapeJson(input), escapeJson(input));
-                HttpRequest req = HttpRequest.newBuilder()
-                        .uri(URI.create("http://localhost:8080/api/v1/ai/advice"))
-                        .header("Content-Type", "application/json")
-                        .POST(HttpRequest.BodyPublishers.ofString(json)).build();
-                String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
-                Platform.runLater(() -> {
-                    // Extract data from JSON response
-                    String data = resp;
-                    if (resp.contains("\"data\":\"")) {
-                        int s = resp.indexOf("\"data\":\"") + 8;
-                        int e = resp.lastIndexOf("\"}");
-                        if (e > s) data = resp.substring(s, e)
-                                .replace("\\n", "\n").replace("\\t", "    ");
-                    }
-                    aiOutput.setText("🤖 AI 建议:\n\n" + data);
-                });
-            } catch (Exception e) {
-                Platform.runLater(() -> aiOutput.setText("AI 请求失败: " + e.getMessage()));
-            }
-        }).start();
-    }
-
-    // ==================== 项目源码扫描页面 ====================
-
-    private VBox buildProjectScanPage() {
-        VBox root = new VBox(12);
-        root.setPadding(new Insets(16));
-        root.setStyle("-fx-background-color: #f8fafc;");
-
-        Label title = new Label("项目源码扫描");
-        title.setFont(Font.font("System", FontWeight.BOLD, 22));
-        title.setTextFill(Color.valueOf("#059669"));
-
-        Label subtitle = new Label("扫描整个项目目录，自动识别 Java/XML/SQL 中的数据库相关代码，检测迁移风险");
-        subtitle.setFont(Font.font("System", 14));
-        subtitle.setTextFill(Color.valueOf("#64748b"));
-
-        // 项目路径选择
-        HBox pathRow = new HBox(8);
-        pathRow.setAlignment(Pos.CENTER_LEFT);
-        pathRow.setPadding(new Insets(12));
-        pathRow.setStyle("-fx-background-color: white; -fx-border-color: #e2e8f0; -fx-border-radius: 8;");
-
-        projectPathField = new TextField(System.getProperty("user.dir"));
-        projectPathField.setPrefWidth(500);
-        projectPathField.setPromptText("项目根目录路径");
-
-        projSourceCombo = new ComboBox<>(FXCollections.observableArrayList("MYSQL", "ORACLE", "SQLSERVER"));
-        projSourceCombo.setValue("MYSQL"); projSourceCombo.setPrefWidth(120);
-        projTargetCombo = new ComboBox<>(FXCollections.observableArrayList("POSTGRESQL", "DAMENG", "GAUSSDB", "OCEANBASE", "GOLDENDB"));
-        projTargetCombo.setValue("POSTGRESQL"); projTargetCombo.setPrefWidth(120);
-
-        Button scanBtn = new Button("开始扫描");
-        scanBtn.setStyle("-fx-background-color: #059669; -fx-text-fill: white; -fx-font-size: 15px; -fx-font-weight: bold; -fx-padding: 10 28;");
-        scanBtn.setOnAction(e -> runProjectScan());
-
-        Button exportProjBtn = new Button("📄 导出报告");
-        exportProjBtn.setStyle("-fx-background-color: #f59e0b; -fx-text-fill: white; -fx-padding: 8 16;");
-        exportProjBtn.setOnAction(e -> exportReport("项目源码扫描报告",
-                projSourceCombo.getValue() + " → " + projTargetCombo.getValue(),
-                projResult.getText()));
-
-        projProgress = new ProgressIndicator(-1);
-        projProgress.setVisible(false);
-        projProgress.setPrefSize(28, 28);
-
-        projStatusLabel = new Label("");
-        projStatusLabel.setTextFill(Color.valueOf("#64748b"));
-
-        pathRow.getChildren().addAll(
-                new Label("项目路径:"), projectPathField,
-                new Label("源:"), projSourceCombo,
-                new Label("目标:"), projTargetCombo,
-                scanBtn, exportProjBtn, projProgress, projStatusLabel
-        );
-
-        // 结果区
-        projResult = new TextArea();
-        projResult.setEditable(false);
-        projResult.setPrefRowCount(22);
-        projResult.setStyle("-fx-font-family: 'Consolas', 'Microsoft YaHei', monospace; -fx-font-size: 13px;");
-        VBox.setVgrow(projResult, Priority.ALWAYS);
-
-        root.getChildren().addAll(title, subtitle, pathRow, projResult);
-        return root;
     }
 
     private void runProjectScan() {
-        String path = projectPathField.getText().trim();
-        if (path.isEmpty()) return;
-
-        projProgress.setVisible(true);
-        projStatusLabel.setText("正在扫描...");
-        projResult.clear();
-
-        String jsonBody = String.format("""
-            {"projectPath": "%s", "sourceDbType": "%s", "targetDbType": "%s"}
-            """, escapeJson(path), projSourceCombo.getValue(), projTargetCombo.getValue());
-
+        projProgress.setVisible(true); statusLeft.setText("扫描中...");
         new Thread(() -> {
             try {
-                HttpRequest req = HttpRequest.newBuilder()
-                        .uri(URI.create("http://localhost:8080/api/v1/scan/project-full"))
-                        .header("Content-Type", "application/json")
-                        .POST(HttpRequest.BodyPublishers.ofString(jsonBody)).build();
+                String body = String.format("""
+{"projectPath":"%s","sourceDbType":"%s","targetDbType":"%s"}""",
+                        esc(projPath.getText()), esc(projSource.getValue()), esc(projTarget.getValue()));
+                HttpRequest req = HttpRequest.newBuilder().uri(URI.create("http://localhost:8080/api/v1/scan/project-full"))
+                        .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
                 String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
-                Platform.runLater(() -> {
-                    projProgress.setVisible(false);
-                    projStatusLabel.setText("扫描完成 ✓");
-                    projResult.setText(formatProjectScanResult(resp));
-                });
-            } catch (Exception e) {
-                Platform.runLater(() -> {
-                    projProgress.setVisible(false);
-                    projStatusLabel.setText("失败: " + e.getMessage());
-                });
-            }
+                Platform.runLater(() -> { projProgress.setVisible(false); statusLeft.setText("扫描完成"); projResult.setText(formatProj(resp)); });
+            } catch (Exception e) { Platform.runLater(() -> { projProgress.setVisible(false); statusLeft.setText("失败"); }); }
         }).start();
     }
 
-    private String formatProjectScanResult(String json) {
-        StringBuilder sb = new StringBuilder();
-        try {
-            String body = json;
-            int dataIdx = json.indexOf("\"data\":");
-            if (dataIdx >= 0) body = json.substring(dataIdx + 6);
-
-            String path = extractJsonValue(body, "projectPath");
-            String srcDb = extractJsonValue(body, "sourceDbType");
-            String tgtDb = extractJsonValue(body, "targetDbType");
-            int totalFiles = extractJsonInt(body, "totalFiles");
-            int javaFiles = extractJsonInt(body, "javaFiles");
-            int xmlFiles = extractJsonInt(body, "xmlFiles");
-            int sqlFiles = extractJsonInt(body, "sqlFiles");
-            int totalIssues = extractJsonInt(body, "totalIssues");
-            int highRisk = extractJsonInt(body, "highRisk");
-            int mediumRisk = extractJsonInt(body, "mediumRisk");
-            int lowRisk = extractJsonInt(body, "lowRisk");
-            double riskScore = extractJsonDouble(body, "riskScore");
-
-            sb.append("╔══════════════════════════════════════════════╗\n");
-            sb.append("║        DMA 项目源码扫描报告                   ║\n");
-            sb.append("╚══════════════════════════════════════════════╝\n\n");
-            sb.append(String.format("  项目路径: %s\n", path));
-            sb.append(String.format("  迁移方向: %s → %s\n\n", srcDb, tgtDb));
-
-            // 文件统计
-            sb.append("  ────── 扫描文件 ──────\n\n");
-            int barLen = 30;
-            sb.append("  Java:    ").append(progressBar(javaFiles, totalFiles, barLen))
-              .append(String.format(" %d\n", javaFiles));
-            sb.append("  XML:     ").append(progressBar(xmlFiles, totalFiles, barLen))
-              .append(String.format(" %d\n", xmlFiles));
-            sb.append("  SQL:     ").append(progressBar(sqlFiles, totalFiles, barLen))
-              .append(String.format(" %d\n", sqlFiles));
-            sb.append(String.format("\n  共扫描: %d 个文件\n\n", totalFiles));
-
-            // 风险统计
-            sb.append("  ────── 发现问题 ──────\n\n");
-            sb.append(String.format("  ✗ 高风险: %d\n", highRisk));
-            sb.append(String.format("  ⚠ 中风险: %d\n", mediumRisk));
-            sb.append(String.format("  ℹ 低风险: %d\n", lowRisk));
-            sb.append(String.format("\n  总问题数: %d\n\n", totalIssues));
-
-            // 风险评分
-            String riskLevel;
-            if (riskScore >= 50) riskLevel = "⚠ 高风险";
-            else if (riskScore >= 20) riskLevel = "⚡ 中风险";
-            else riskLevel = "✓ 低风险";
-
-            sb.append(String.format("  迁移风险评分: %.0f/100  %s\n\n", riskScore, riskLevel));
-            int filled = (int) (riskScore / 100.0 * 40);
-            sb.append("  [");
-            for (int i = 0; i < 40; i++) sb.append(i < filled ? "█" : "░");
-            sb.append(String.format("] %.0f%%\n\n", riskScore));
-
-            // 问题示例
-            if (totalIssues > 0) {
-                sb.append("  ────── 问题示例（前 10 条）──────\n\n");
-                Pattern p = Pattern.compile(
-                    "\"ruleCode\":\"([^\"]+)\".*?\"severity\":\"([^\"]+)\".*?\"compatibilityLevel\":\"([^\"]+)\".*?\"message\":\"([^\"]+)\""
-                );
-                Matcher m = p.matcher(body);
-                int count = 0;
-                while (m.find() && count < 10) {
-                    count++;
-                    String sev = m.group(2);
-                    String icon = "ERROR".equals(sev) ? "✗" : ("WARNING".equals(sev) ? "⚠" : "ℹ");
-                    sb.append(String.format("  [%s] %s — %s\n", icon, m.group(1), m.group(4)));
-                }
-            }
-
-            sb.append("\n══════════════════════════════════════════════\n");
-        } catch (Exception e) {
-            sb.append("  格式化错误: ").append(e.getMessage()).append("\n");
-        }
-        return sb.toString();
+    private void checkAiStatus() {
+        new Thread(() -> {
+            try {
+                HttpRequest req = HttpRequest.newBuilder().uri(URI.create("http://localhost:8080/api/v1/ai/status")).GET().build();
+                String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
+                Platform.runLater(() -> {
+                    if (resp.contains("\"available\":true")) { aiStatus.setText("🤖 AI 已连接"); aiStatus.setTextFill(Color.valueOf("#16a34a")); }
+                    else { aiStatus.setText("⚠ AI 未启用"); aiStatus.setTextFill(Color.valueOf("#d97706")); }
+                });
+            } catch (Exception e) { Platform.runLater(() -> { aiStatus.setText("✗ 不可用"); aiStatus.setTextFill(Color.valueOf("#dc2626")); }); }
+        }).start();
     }
 
-    private String progressBar(int count, int total, int len) {
-        if (total == 0) return "░".repeat(len);
-        int filled = (int) ((double) count / total * len);
-        return "█".repeat(Math.min(filled, len)) + "░".repeat(Math.max(0, len - filled));
+    private void askAi() {
+        String input = aiInput.getText().trim(); if (input.isEmpty()) return;
+        statusLeft.setText("AI 思考中...");
+        new Thread(() -> {
+            try {
+                String body = String.format("""
+{"sourceSql":"%s","message":"%s","severity":"WARNING","compatibilityLevel":"MANUAL_REVIEW","ruleCode":"USER_ASK"}""",
+                        esc(input), esc(input));
+                HttpRequest req = HttpRequest.newBuilder().uri(URI.create("http://localhost:8080/api/v1/ai/advice"))
+                        .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
+                String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
+                Platform.runLater(() -> {
+                    String data = resp.contains("\"data\":\"") ? extractData(resp) : resp;
+                    aiResult.setText("🤖 AI 建议:\n\n" + data.replace("\\n", "\n").replace("\\t", "    "));
+                    statusLeft.setText("AI 回复就绪");
+                });
+            } catch (Exception e) { Platform.runLater(() -> statusLeft.setText("AI 失败")); }
+        }).start();
     }
 
-    // ==================== 格式化 SQL 转换结果 ====================
-
-    private String formatSqlConvertResult(String json, String originalSql) {
-        StringBuilder sb = new StringBuilder();
-        String source = sqlSourceCombo.getValue();
-        String target = sqlTargetCombo.getValue();
-
-        sb.append("╔══════════════════════════════════════════════╗\n");
-        sb.append(String.format("║  %s  →  %s                               ║\n",
-                padRight(source, 10), padRight(target, 12)));
-        sb.append("╚══════════════════════════════════════════════╝\n\n");
-
-        // 提取 data 数组
-        String dataSection = json;
-        int dataIdx = json.indexOf("\"data\":");
-        if (dataIdx >= 0) {
-            dataSection = json.substring(dataIdx + 7);
-        }
-
-        // 解析每条结果
-        Pattern itemPattern = Pattern.compile(
-                "\\{[^}]*\"ruleCode\"\\s*:\\s*\"([^\"]*)\"[^}]*" +
-                "\"ruleName\"\\s*:\\s*\"([^\"]*)\"[^}]*" +
-                "\"severity\"\\s*:\\s*\"([^\"]*)\"[^}]*" +
-                "\"compatibilityLevel\"\\s*:\\s*\"([^\"]*)\"[^}]*" +
-                "\"sourceSql\"\\s*:\\s*\"([^\"]*)\"[^}]*" +
-                "(?:\"suggestedSql\"\\s*:\\s*\"([^\"]*)\"[^}]*)?"
-        );
-
-        // 更简单的解析方式：逐个提取字段
-        Pattern codePat = Pattern.compile("\"ruleCode\"\\s*:\\s*\"([^\"]+)\"");
-        Pattern namePat = Pattern.compile("\"ruleName\"\\s*:\\s*\"([^\"]+)\"");
-        Pattern sevPat = Pattern.compile("\"severity\"\\s*:\\s*\"([^\"]+)\"");
-        Pattern levelPat = Pattern.compile("\"compatibilityLevel\"\\s*:\\s*\"([^\"]+)\"");
-        Pattern msgPat = Pattern.compile("\"message\"\\s*:\\s*\"([^\"]+)\"");
-        Pattern sugPat = Pattern.compile("\"suggestedSql\"\\s*:\\s*\"([^\"]+)\"");
-
-        // 按每个结果对象分割
-        String[] parts = dataSection.split("\\},\\s*\\{");
-        if (parts.length == 0) parts = new String[]{dataSection};
-
-        int issueNum = 0;
-        boolean foundIssues = false;
-
-        for (String part : parts) {
-            Matcher codeM = codePat.matcher(part);
-            Matcher nameM = namePat.matcher(part);
-            Matcher sevM = sevPat.matcher(part);
-            Matcher levelM = levelPat.matcher(part);
-            Matcher msgM = msgPat.matcher(part);
-            Matcher sugM = sugPat.matcher(part);
-
-            if (!codeM.find()) continue;
-            foundIssues = true;
-            issueNum++;
-
-            String ruleCode = codeM.group(1);
-            String ruleName = nameM.find() ? nameM.group(1) : ruleCode;
-            String severity = sevM.find() ? sevM.group(1) : "INFO";
-            String level = levelM.find() ? levelM.group(1) : "";
-            String message = msgM.find() ? msgM.group(1) : "";
-            String suggestedSql = sugM.find() ? sugM.group(1).replace("\\\"", "\"") : null;
-
-            // 严重程度标记
-            String sevIcon = switch (severity) {
-                case "ERROR" -> "✗ ERROR";
-                case "WARNING" -> "⚠ WARNING";
-                default -> "ℹ INFO";
-            };
-
-            // 兼容性级别中文
-            String levelCN = switch (level) {
-                case "AUTO_CONVERTIBLE" -> "可自动转换";
-                case "MANUAL_REVIEW" -> "需人工审核";
-                case "INCOMPATIBLE" -> "不兼容";
-                case "COMPATIBLE" -> "完全兼容";
-                default -> level;
-            };
-
-            sb.append("┌──────────────────────────────────────────┐\n");
-            sb.append(String.format("│ 【%d】 %s\n", issueNum, ruleName));
-            sb.append(String.format("│ 规则: %s | %s | %s\n", ruleCode, sevIcon, levelCN));
-            sb.append("└──────────────────────────────────────────┘\n\n");
-
-            // 原始 SQL
-            sb.append("  ── 原 SQL ──\n");
-            String displaySql = originalSql.length() < 500 ? originalSql : originalSql.substring(0, 500) + "...";
-            sb.append("  ").append(displaySql).append("\n\n");
-
-            // 转换后 SQL
-            if (suggestedSql != null && !suggestedSql.isEmpty()) {
-                sb.append("     ↓↓↓ 转换后 ↓↓↓\n\n");
-                sb.append("  ").append(suggestedSql).append("\n\n");
-            } else {
-                sb.append("     ↓↓↓ 无法自动转换，需人工处理 ↓↓↓\n\n");
-            }
-
-            // 说明
-            if (!message.isEmpty()) {
-                sb.append("  ── 兼容性说明 ──\n");
-                sb.append("  ").append(message).append("\n\n");
-            }
-
-            sb.append("─".repeat(42)).append("\n\n");
-        }
-
-        if (!foundIssues) {
-            sb.append("  ✓ 未发现兼容性问题！\n\n");
-            sb.append("  该 SQL 在目标数据库中完全兼容，无需修改。\n");
-        }
-
-        // 汇总
-        sb.append("══════════════════════════════════════════════\n");
-        sb.append(String.format("  扫描完成: 发现 %d 个兼容性问题\n", issueNum));
-        sb.append(String.format("  源: %s → 目标: %s\n", source, target));
-        sb.append("══════════════════════════════════════════════\n");
-
-        return sb.toString();
-    }
-
-    private String padRight(String s, int len) {
-        if (s.length() >= len) return s;
-        return s + " ".repeat(len - s.length());
-    }
-
-    // ==================== 报告导出 ====================
-
-    /** 将当前结果导出为指定格式报告 */
     private void exportReport(String title, String subtitle, String content) {
         if (content == null || content.isBlank()) return;
-        javafx.scene.control.Alert alert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.CONFIRMATION);
-        alert.setTitle("导出报告");
-        alert.setHeaderText("选择导出格式");
-        alert.setContentText("请选择报告文件格式:");
-
-        javafx.scene.control.ButtonType htmlBtn = new javafx.scene.control.ButtonType("HTML (浏览器)");
-        javafx.scene.control.ButtonType pdfBtn = new javafx.scene.control.ButtonType("PDF (便携文档)");
-        javafx.scene.control.ButtonType wordBtn = new javafx.scene.control.ButtonType("Word (可编辑)");
-        javafx.scene.control.ButtonType cancelBtn = javafx.scene.control.ButtonType.CANCEL;
-
-        alert.getButtonTypes().setAll(htmlBtn, pdfBtn, wordBtn, cancelBtn);
-
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("导出报告"); alert.setHeaderText("选择导出格式");
+        ButtonType htmlBtn = new ButtonType("HTML (浏览器)"), pdfBtn = new ButtonType("PDF (便携)"), wordBtn = new ButtonType("Word (可编辑)");
+        alert.getButtonTypes().setAll(htmlBtn, pdfBtn, wordBtn, ButtonType.CANCEL);
         alert.showAndWait().ifPresent(btn -> {
-            String format;
-            String ext;
-            if (btn == htmlBtn) { format = "HTML"; ext = ".html"; }
-            else if (btn == pdfBtn) { format = "PDF"; ext = ".pdf"; }
-            else if (btn == wordBtn) { format = "WORD"; ext = ".docx"; }
-            else return;
-
+            String fmt = btn == pdfBtn ? "PDF" : btn == wordBtn ? "WORD" : "HTML";
+            String ext = btn == pdfBtn ? ".pdf" : btn == wordBtn ? ".docx" : ".html";
             new Thread(() -> {
                 try {
-                    String jsonBody = String.format("""
-                        {"title": "%s", "subtitle": "%s", "content": "%s", "format": "%s"}
-                        """, escapeJson(title), escapeJson(subtitle), escapeJson(content), format);
-
-                    HttpRequest req = HttpRequest.newBuilder()
-                            .uri(URI.create("http://localhost:8080/api/v1/report/export"))
-                            .header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString(jsonBody)).build();
-
-                    HttpResponse<byte[]> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofByteArray());
-
-                    if (resp.statusCode() == 200) {
-                        String desktop = System.getProperty("user.home") + "\\Desktop";
-                        String filename = "DMA_Report_" + java.time.LocalDateTime.now()
-                                .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ext;
-                        java.nio.file.Path filePath = java.nio.file.Path.of(desktop, filename);
-                        java.nio.file.Files.write(filePath, resp.body());
-
-                        // Open file on background thread to avoid AWT/FX conflicts
-                        final java.nio.file.Path finalPath = filePath;
-                        new Thread(() -> {
-                            try {
-                                java.awt.Desktop.getDesktop().open(finalPath.toFile());
-                            } catch (Exception ignored) {}
-                        }).start();
-                    }
+                    String body = String.format("""
+{"title":"%s","subtitle":"%s","content":"%s","format":"%s"}""",
+                            esc(title), esc(subtitle), esc(content), fmt);
+                    HttpRequest req = HttpRequest.newBuilder().uri(URI.create("http://localhost:8080/api/v1/report/export"))
+                            .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
+                    byte[] data = httpClient.send(req, HttpResponse.BodyHandlers.ofByteArray()).body();
+                    String desktop = System.getProperty("user.home") + "\\Desktop";
+                    String fn = "DMA_Report_" + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ext;
+                    java.nio.file.Path fp = java.nio.file.Path.of(desktop, fn);
+                    java.nio.file.Files.write(fp, data);
+                    new Thread(() -> { try { java.awt.Desktop.getDesktop().open(fp.toFile()); } catch (Exception ignored) {} }).start();
+                    Platform.runLater(() -> statusLeft.setText("已导出: " + fn));
                 } catch (Exception ignored) {}
             }).start();
         });
     }
 
-    // ==================== 工具方法 ====================
-
-    private String escapeJson(String s) {
-        return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t");
+    // ==================== 格式化 ====================
+    private String formatScan(String json) {
+        String b = json.contains("\"data\":") ? json.substring(json.indexOf("\"data\":") + 7) : json;
+        StringBuilder sb = new StringBuilder("╔══════════════════════════════════╗\n║    DMA 数据库兼容性体检报告       ║\n╚══════════════════════════════════╝\n\n");
+        sb.append(String.format("  数据库: %s (%s → %s)\n\n", ej(b, "databaseName"), ej(b, "sourceDbType"), ej(b, "targetDbType")));
+        sb.append(String.format("  存储过程: %d  函数: %d  表: %d  视图: %d\n\n", ji(b, "storedProcedureCount"), ji(b, "functionCount"), ji(b, "tableCount"), ji(b, "viewCount")));
+        sb.append(String.format("  ✓ 完全兼容: %d  ⚡ 可自动转换: %d\n  ⚠ 需人工: %d  ✗ 不兼容: %d\n", ji(b, "compatibleCount"), ji(b, "autoConvertibleCount"), ji(b, "manualReviewCount"), ji(b, "incompatibleCount")));
+        double rate = jd(b, "compatibilityRate");
+        sb.append(String.format("\n  ★ 兼容率: %.1f%%\n  [", rate));
+        int bar = (int)(rate / 100 * 40);
+        sb.append("█".repeat(bar)).append("░".repeat(40-bar)).append(String.format("] %.1f%%\n", rate));
+        return sb.toString();
     }
 
-    private String extractJsonValue(String json, String key) {
-        Pattern p = Pattern.compile("\"" + key + "\"\\s*:\\s*\"([^\"]*)\"");
-        Matcher m = p.matcher(json);
-        return m.find() ? m.group(1) : "";
+    private String formatSql(String json, String orig) {
+        String b = json.contains("\"data\":") ? json.substring(json.indexOf("\"data\":") + 7) : json;
+        StringBuilder sb = new StringBuilder(String.format("╔══════════════════════════════════╗\n║  %s → %s\n╚══════════════════════════════════╝\n\n", sqlSource.getValue(), sqlTarget.getValue()));
+        int n = 0;
+        Matcher m = Pattern.compile("\"ruleCode\":\"([^\"]+)\".*?\"severity\":\"([^\"]+)\".*?\"message\":\"([^\"]+)\"").matcher(b);
+        while (m.find()) {
+            n++; String sev = m.group(2);
+            sb.append(String.format("[%s] %s — %s\n── 原 SQL ──\n  %s\n", "ERROR".equals(sev) ? "✗" : "WARNING".equals(sev) ? "⚠" : "ℹ", m.group(1), m.group(3), orig));
+            Matcher sm = Pattern.compile("\"suggestedSql\":\"([^\"]+)\"").matcher(b);
+            if (sm.find()) sb.append("  ↓↓↓ 转换后 ↓↓↓\n  ").append(sm.group(1).replace("\\\"", "\"")).append("\n");
+            sb.append("\n");
+        }
+        sb.append(String.format("══════════════════════════════════\n  发现 %d 个问题\n", n));
+        return sb.toString();
     }
 
-    private int extractJsonInt(String json, String key) {
-        Pattern p = Pattern.compile("\"" + key + "\"\\s*:\\s*(-?\\d+)");
-        Matcher m = p.matcher(json);
-        return m.find() ? Integer.parseInt(m.group(1)) : 0;
+    private String formatSp(String json) {
+        String b = json.contains("\"data\":") ? json.substring(json.indexOf("\"data\":") + 6) : json;
+        StringBuilder sb = new StringBuilder(String.format("╔══════════════════════════════════╗\n║  %s 迁移: %s → %s\n╚══════════════════════════════════╝\n\n",
+                "PROCEDURE".equals(ej(b, "objectType")) ? "存储过程" : ej(b, "objectType"), spSource.getValue(), spTarget.getValue()));
+        sb.append("── 原 DDL ──\n").append(ej(b, "originalDdl").replace("\\n", "\n").replace("\\t", "    ")).append("\n\n");
+        sb.append("  ↓↓↓ 转换后 ↓↓↓\n\n── 转换后 DDL ──\n").append(ej(b, "convertedDdl").replace("\\n", "\n").replace("\\t", "    ")).append("\n\n");
+        int c = ji(b, "changeCount");
+        if (c > 0) { sb.append("── 变更 (").append(c).append("项) ──\n"); Matcher cm = Pattern.compile("\"changes\":\\[(.*?)\\]").matcher(b);
+            if (cm.find()) { int x = 1; Matcher im = Pattern.compile("\"([^\"]+)\"").matcher(cm.group(1));
+                while (im.find()) { String ch = im.group(1); if (ch.length() > 2) sb.append(x++).append(". ").append(ch).append("\n"); } } }
+        return sb.toString();
     }
 
-    private double extractJsonDouble(String json, String key) {
-        Pattern p = Pattern.compile("\"" + key + "\"\\s*:\\s*(-?[\\d.]+)");
-        Matcher m = p.matcher(json);
-        return m.find() ? Double.parseDouble(m.group(1)) : 100.0;
+    private String formatProj(String json) {
+        String b = json.contains("\"data\":") ? json.substring(json.indexOf("\"data\":") + 6) : json;
+        StringBuilder sb = new StringBuilder("╔══════════════════════════════════╗\n║  DMA 项目源码扫描报告            ║\n╚══════════════════════════════════╝\n\n");
+        sb.append(String.format("  路径: %s\n  迁移: %s → %s\n\n", ej(b, "projectPath"), ej(b, "sourceDbType"), ej(b, "targetDbType")));
+        sb.append(String.format("  共扫描: %d 个文件\n  Java: %d  XML: %d  SQL: %d\n\n", ji(b, "totalFiles"), ji(b, "javaFiles"), ji(b, "xmlFiles"), ji(b, "sqlFiles")));
+        sb.append(String.format("  ✗ 高风险: %d  ⚠ 中风险: %d  ℹ 低风险: %d\n", ji(b, "highRisk"), ji(b, "mediumRisk"), ji(b, "lowRisk")));
+        double s = jd(b, "riskScore");
+        sb.append(String.format("\n  风险评分: %.0f/100  %s\n", s, s >= 50 ? "⚠ 高风险" : s >= 20 ? "⚡ 中风险" : "✓ 低风险"));
+        return sb.toString();
     }
 
-    @Override
-    public void stop() {
-        if (springContext != null) springContext.close();
-        Platform.exit();
-    }
+    // ==================== 工具 ====================
+    private String ej(String json, String key) { Matcher m = Pattern.compile("\"" + key + "\"\\s*:\\s*\"([^\"]*)\"").matcher(json); return m.find() ? m.group(1) : ""; }
+    private int ji(String json, String key) { Matcher m = Pattern.compile("\"" + key + "\"\\s*:\\s*(-?\\d+)").matcher(json); return m.find() ? Integer.parseInt(m.group(1)) : 0; }
+    private double jd(String json, String key) { Matcher m = Pattern.compile("\"" + key + "\"\\s*:\\s*(-?[\\d.]+)").matcher(json); return m.find() ? Double.parseDouble(m.group(1)) : 0.0; }
+    private String esc(String s) { if (s == null) return ""; return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t"); }
+    private String extractData(String json) { int s = json.indexOf("\"data\":\"") + 8, e = json.lastIndexOf("\"}"); return e > s ? json.substring(s, e) : json; }
+
+    // ==================== UI工厂 ====================
+    private VBox pageRoot(String t, String sub) { VBox r = new VBox(14); r.setPadding(new Insets(20, 24, 20, 24)); r.getChildren().add(title(t)); if (sub != null) { Label sl = new Label(sub); sl.setFont(Font.font("System", 13)); sl.setTextFill(Color.valueOf("#64748b")); r.getChildren().add(sl); } return r; }
+    private ScrollPane wrap(VBox c) { ScrollPane s = new ScrollPane(c); s.setFitToWidth(true); s.setStyle("-fx-background-color: #f1f5f9;"); return s; }
+    private Label title(String t) { Label l = new Label(t); l.setFont(Font.font("System", FontWeight.BOLD, 20)); l.setTextFill(Color.valueOf("#1e293b")); return l; }
+    private Label titleSm(String t) { Label l = new Label(t); l.setFont(Font.font("System", FontWeight.BOLD, 15)); l.setPadding(new Insets(10, 0, 0, 0)); return l; }
+    private Label subtitle(String t) { Label l = new Label(t); l.setFont(Font.font("System", 13)); l.setTextFill(Color.valueOf("#64748b")); return l; }
+    private Label lbl(String t) { return lbl(t, 13, "#334155"); }
+    private Label lbl(String t, int s, String c) { Label l = new Label(t); l.setFont(Font.font("System", s)); l.setTextFill(Color.valueOf(c)); return l; }
+    private TextField tf(String v, int w, String p) { TextField f = new TextField(v); f.setPrefWidth(w); f.setPromptText(p); f.setStyle("-fx-background-radius: 4; -fx-border-radius: 4; -fx-border-color: #d1d5db; -fx-padding: 6 10;"); return f; }
+    private ComboBox<String> cb(int w, String p) { ComboBox<String> c = new ComboBox<>(); c.setPrefWidth(w); c.setPromptText(p); c.setStyle("-fx-background-radius: 4; -fx-border-radius: 4;"); return c; }
+    private ComboBox<String> cbv(int w, String v, String... items) { ComboBox<String> c = new ComboBox<>(FXCollections.observableArrayList(items)); c.setValue(v); c.setPrefWidth(w); c.setStyle("-fx-background-radius: 4; -fx-border-radius: 4;"); return c; }
+    private Button sbtn(String t, String color) { Button b = new Button(t); b.setStyle("-fx-background-color: " + color + "; -fx-text-fill: white; -fx-background-radius: 4; -fx-padding: 6 14; -fx-font-size: 12px;"); return b; }
+    private Button bbtn(String t, String color) { Button b = new Button(t); b.setStyle("-fx-background-color: " + color + "; -fx-text-fill: white; -fx-background-radius: 6; -fx-padding: 10 24; -fx-font-size: 14px; -fx-font-weight: bold;"); return b; }
+    private TextArea ta(int rows, String prompt) { TextArea a = new TextArea(); a.setPrefRowCount(rows); a.setPromptText(prompt); a.setStyle("-fx-font-family: 'Consolas', monospace; -fx-font-size: 13px; -fx-background-radius: 4; -fx-border-radius: 4; -fx-border-color: #d1d5db;"); return a; }
+    private HBox hbox(int sp, javafx.scene.Node... nodes) { HBox b = new HBox(sp); b.getChildren().addAll(nodes); b.setAlignment(Pos.CENTER_LEFT); return b; }
+    private SplitPane splitV(javafx.scene.Node top, javafx.scene.Node bottom, double ratio) { SplitPane s = new SplitPane(); s.setOrientation(javafx.geometry.Orientation.VERTICAL); s.getItems().addAll(top, bottom); s.setDividerPosition(0, ratio); return s; }
+
+    @Override public void stop() { if (springContext != null) springContext.close(); Platform.exit(); }
 }

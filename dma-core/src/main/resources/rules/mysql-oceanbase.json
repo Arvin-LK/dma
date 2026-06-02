@@ -1,0 +1,165 @@
+{
+  "meta": {
+    "sourceDb": "MYSQL",
+    "targetDb": "OCEANBASE",
+    "version": "1.0.0",
+    "description": "MySQL 到 OceanBase (MySQL 模式) 迁移兼容性规则集 — OceanBase 高度兼容 MySQL 5.7/8.0，但分布式架构带来部分限制",
+    "author": "DMA Team"
+  },
+  "rules": [
+    {
+      "code": "M2OB-FN-001", "name": "NOW() → NOW()", "category": "BUILTIN_FUNCTION", "severity": "INFO", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "OCEANBASE",
+      "matchPattern": "NOW()", "replacementPattern": "NOW()",
+      "description": "MySQL NOW() 在 OceanBase 中直接兼容",
+      "exampleSqlSource": "SELECT NOW();", "exampleSqlTarget": "SELECT NOW();"
+    },
+    {
+      "code": "M2OB-FN-002", "name": "UUID → UUID", "category": "BUILTIN_FUNCTION", "severity": "INFO", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "OCEANBASE",
+      "matchPattern": "UUID()", "replacementPattern": "UUID()",
+      "description": "MySQL UUID() 在 OceanBase 中直接兼容",
+      "exampleSqlSource": "INSERT INTO t (id) VALUES (UUID());", "exampleSqlTarget": "INSERT INTO t (id) VALUES (UUID());"
+    },
+    {
+      "code": "M2OB-FN-003", "name": "IFNULL → IFNULL", "category": "BUILTIN_FUNCTION", "severity": "INFO", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "OCEANBASE",
+      "matchPattern": "IFNULL(${expr1}, ${expr2})", "replacementPattern": "IFNULL(${expr1}, ${expr2})",
+      "description": "MySQL IFNULL 在 OceanBase 中直接兼容",
+      "exampleSqlSource": "SELECT IFNULL(name, 'N/A') FROM users;", "exampleSqlTarget": "SELECT IFNULL(name, 'N/A') FROM users;"
+    },
+    {
+      "code": "M2OB-FN-004", "name": "GROUP_CONCAT → GROUP_CONCAT", "category": "BUILTIN_FUNCTION", "severity": "INFO", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "OCEANBASE",
+      "matchPattern": "GROUP_CONCAT(${expr})", "replacementPattern": "GROUP_CONCAT(${expr})",
+      "description": "MySQL GROUP_CONCAT 在 OceanBase 中直接兼容",
+      "exampleSqlSource": "SELECT GROUP_CONCAT(name) FROM users;", "exampleSqlTarget": "SELECT GROUP_CONCAT(name) FROM users;"
+    },
+    {
+      "code": "M2OB-FN-005", "name": "FIND_IN_SET → FIND_IN_SET", "category": "BUILTIN_FUNCTION", "severity": "INFO", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "OCEANBASE",
+      "matchPattern": "FIND_IN_SET(${str}, ${list})", "replacementPattern": "FIND_IN_SET(${str}, ${list})",
+      "description": "MySQL FIND_IN_SET 在 OceanBase 中直接兼容",
+      "exampleSqlSource": "SELECT * FROM t WHERE FIND_IN_SET('a', tags);", "exampleSqlTarget": "SELECT * FROM t WHERE FIND_IN_SET('a', tags);"
+    },
+    {
+      "code": "M2OB-SYN-001", "name": "反引号 → 反引号", "category": "SYNTAX", "severity": "INFO", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "OCEANBASE",
+      "matchPattern": "`", "replacementPattern": "`",
+      "description": "OceanBase MySQL 模式直接支持反引号引用标识符",
+      "exampleSqlSource": "SELECT `id`, `name` FROM `users`;", "exampleSqlTarget": "SELECT `id`, `name` FROM `users`;"
+    },
+    {
+      "code": "M2OB-SYN-002", "name": "AUTO_INCREMENT → AUTO_INCREMENT", "category": "SYNTAX", "severity": "INFO", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "OCEANBASE",
+      "matchPattern": "AUTO_INCREMENT", "replacementPattern": "AUTO_INCREMENT",
+      "description": "OceanBase MySQL 模式直接支持 AUTO_INCREMENT，但每个表只能有一个自增列且必须是主键",
+      "exampleSqlSource": "CREATE TABLE t (id INT AUTO_INCREMENT PRIMARY KEY);", "exampleSqlTarget": "CREATE TABLE t (id INT AUTO_INCREMENT PRIMARY KEY);"
+    },
+    {
+      "code": "M2OB-SYN-003", "name": "ENGINE → 移除/变更", "category": "SYNTAX", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "OCEANBASE",
+      "matchPattern": "ENGINE=InnoDB", "replacementPattern": "",
+      "description": "OceanBase 不使用 MySQL 存储引擎（内部为 LSM-Tree），ENGINE 子句应移除",
+      "exampleSqlSource": "CREATE TABLE t (id INT) ENGINE=InnoDB;", "exampleSqlTarget": "CREATE TABLE t (id INT);"
+    },
+    {
+      "code": "M2OB-SYN-004", "name": "LOCK/UNLOCK TABLES → 移除", "category": "SYNTAX", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "OCEANBASE",
+      "matchPattern": "LOCK TABLES", "replacementPattern": "",
+      "description": "OceanBase 分布式架构不支持 LOCK/UNLOCK TABLES，推荐用 SELECT ... FOR UPDATE 替代",
+      "exampleSqlSource": "LOCK TABLES users WRITE;", "exampleSqlTarget": "-- OceanBase 不支持 LOCK TABLES，使用 SELECT ... FOR UPDATE 替代"
+    },
+    {
+      "code": "M2OB-SYN-005", "name": "HANDLER → SELECT 替代", "category": "SYNTAX", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "OCEANBASE",
+      "matchPattern": "HANDLER ${table} OPEN", "replacementPattern": "",
+      "description": "OceanBase 不支持 HANDLER 语句，需用 SELECT 替代",
+      "exampleSqlSource": "HANDLER users OPEN;", "exampleSqlTarget": "-- OceanBase 不支持 HANDLER，使用 SELECT 替代"
+    },
+    {
+      "code": "M2OB-DT-001", "name": "JSON 类型 → JSON", "category": "DATATYPE", "severity": "WARNING", "patternType": "DATATYPE",
+      "sourceDbType": "MYSQL", "targetDbType": "OCEANBASE",
+      "matchPattern": "JSON", "replacementPattern": "JSON",
+      "description": "OceanBase 支持 JSON 类型，但部分 JSON 函数有差异（如 JSON_TABLE）",
+      "exampleSqlSource": "CREATE TABLE t (data JSON);", "exampleSqlTarget": "CREATE TABLE t (data JSON);"
+    },
+    {
+      "code": "M2OB-DT-002", "name": "FULLTEXT 索引 → 移除", "category": "DATATYPE", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "OCEANBASE",
+      "matchPattern": "FULLTEXT", "replacementPattern": "",
+      "description": "OceanBase 不支持全文索引 FULLTEXT，需移除或使用 ElasticSearch 等外部方案",
+      "exampleSqlSource": "CREATE FULLTEXT INDEX idx_ft ON articles(title, body);", "exampleSqlTarget": "-- OceanBase 不支持 FULLTEXT 索引，需外部全文检索方案"
+    },
+    {
+      "code": "M2OB-DT-003", "name": "SPATIAL 索引 → 移除", "category": "DATATYPE", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "OCEANBASE",
+      "matchPattern": "SPATIAL INDEX", "replacementPattern": "",
+      "description": "OceanBase 不支持空间索引 SPATIAL INDEX",
+      "exampleSqlSource": "CREATE SPATIAL INDEX idx_geo ON places(location);", "exampleSqlTarget": "-- OceanBase 不支持 SPATIAL 索引"
+    },
+    {
+      "code": "M2OB-DT-004", "name": "ENUM → VARCHAR+CHECK", "category": "DATATYPE", "severity": "WARNING", "patternType": "DATATYPE",
+      "sourceDbType": "MYSQL", "targetDbType": "OCEANBASE",
+      "matchPattern": "ENUM", "replacementPattern": "VARCHAR",
+      "description": "OceanBase 支持 ENUM 但推荐使用 VARCHAR + CHECK 约束以提高可移植性",
+      "exampleSqlSource": "CREATE TABLE t (status ENUM('A','B','C'));", "exampleSqlTarget": "CREATE TABLE t (status VARCHAR(1) CHECK (status IN ('A','B','C')));"
+    },
+    {
+      "code": "M2OB-DDL-001", "name": "分区表语法差异", "category": "DDL", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "OCEANBASE",
+      "matchPattern": "PARTITION BY", "replacementPattern": "PARTITION BY",
+      "description": "OceanBase 支持分区，但推荐使用基于主键的自动分区策略（如 PARTITION BY HASH），而非 MySQL 的显式分区语法",
+      "exampleSqlSource": "CREATE TABLE t (id INT) PARTITION BY RANGE (id) (PARTITION p0 VALUES LESS THAN (100));", "exampleSqlTarget": "CREATE TABLE t (id INT) PARTITION BY HASH(id) PARTITIONS 8;"
+    },
+    {
+      "code": "M2OB-DDL-002", "name": "外键约束 → 需评估", "category": "DDL", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "OCEANBASE",
+      "matchPattern": "FOREIGN KEY", "replacementPattern": "FOREIGN KEY",
+      "description": "OceanBase 支持外键但性能开销较大（分布式跨节点检查），建议应用层维护引用完整性",
+      "exampleSqlSource": "ALTER TABLE orders ADD FOREIGN KEY (user_id) REFERENCES users(id);", "exampleSqlTarget": "ALTER TABLE orders ADD FOREIGN KEY (user_id) REFERENCES users(id);"
+    },
+    {
+      "code": "M2OB-DDL-003", "name": "触发器中跨节点操作限制", "category": "DDL", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "OCEANBASE",
+      "matchPattern": "CREATE TRIGGER", "replacementPattern": "CREATE TRIGGER",
+      "description": "OceanBase 触发器支持有限：不能修改其他表的分区键，建议将复杂触发器逻辑移至应用层",
+      "exampleSqlSource": "CREATE TRIGGER t1 AFTER INSERT ON orders FOR EACH ROW UPDATE inventory SET count=count-1;", "exampleSqlTarget": "CREATE TRIGGER t1 AFTER INSERT ON orders FOR EACH ROW UPDATE inventory SET count=count-1;"
+    },
+    {
+      "code": "M2OB-OTH-001", "name": "系统变量差异", "category": "OTHER", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "OCEANBASE",
+      "matchPattern": "@@SESSION.${var}", "replacementPattern": "@@SESSION.${var}",
+      "description": "OceanBase 支持部分 MySQL 系统变量，但部分变量名称或行为不同，需验证",
+      "exampleSqlSource": "SET SESSION sql_mode='STRICT_TRANS_TABLES';", "exampleSqlTarget": "SET SESSION sql_mode='STRICT_TRANS_TABLES';"
+    },
+    {
+      "code": "M2OB-OTH-002", "name": "SAVEPOINT 事务差异", "category": "OTHER", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "OCEANBASE",
+      "matchPattern": "SAVEPOINT ${name}", "replacementPattern": "SAVEPOINT ${name}",
+      "description": "OceanBase 支持 SAVEPOINT，但分布式事务中可能有性能影响",
+      "exampleSqlSource": "SAVEPOINT sp1;", "exampleSqlTarget": "SAVEPOINT sp1;"
+    },
+    {
+      "code": "M2OB-OTH-003", "name": "XA 分布式事务", "category": "OTHER", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "OCEANBASE",
+      "matchPattern": "XA ${cmd}", "replacementPattern": "XA ${cmd}",
+      "description": "OceanBase 支持 XA 事务但实现不同于 MySQL，需充分测试验证",
+      "exampleSqlSource": "XA START 'xid1';", "exampleSqlTarget": "XA START 'xid1';"
+    },
+    {
+      "code": "M2OB-OTH-004", "name": "LOAD DATA INFILE → LOAD DATA", "category": "OTHER", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "OCEANBASE",
+      "matchPattern": "LOAD DATA INFILE", "replacementPattern": "LOAD DATA LOCAL INFILE",
+      "description": "OceanBase 支持 LOAD DATA，但文件路径解析不同，推荐使用 LOCAL 模式",
+      "exampleSqlSource": "LOAD DATA INFILE '/tmp/data.csv' INTO TABLE t;", "exampleSqlTarget": "LOAD DATA LOCAL INFILE '/tmp/data.csv' INTO TABLE t;"
+    },
+    {
+      "code": "M2OB-OTH-005", "name": "字符集 → utf8mb4", "category": "OTHER", "severity": "INFO", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "OCEANBASE",
+      "matchPattern": "CHARACTER SET utf8mb4", "replacementPattern": "CHARACTER SET utf8mb4",
+      "description": "OceanBase 推荐使用 utf8mb4 字符集，直接兼容",
+      "exampleSqlSource": "CREATE TABLE t (name VARCHAR(100)) CHARACTER SET utf8mb4;", "exampleSqlTarget": "CREATE TABLE t (name VARCHAR(100)) CHARACTER SET utf8mb4;"
+    }
+  ]
+}
