@@ -1,0 +1,200 @@
+{
+  "meta": {
+    "sourceDb": "SQLSERVER",
+    "targetDb": "POSTGRESQL",
+    "version": "1.0.0",
+    "description": "SQL Server 到 PostgreSQL 迁移兼容性规则集",
+    "author": "DMA Team"
+  },
+  "rules": [
+    {
+      "code": "S2PG-FN-001", "name": "ISNULL → COALESCE", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "ISNULL(${expr1}, ${expr2})", "replacementPattern": "COALESCE(${expr1}, ${expr2})",
+      "description": "SQL Server ISNULL 替换为 PG COALESCE",
+      "exampleSqlSource": "SELECT ISNULL(name, 'N/A') FROM users;", "exampleSqlTarget": "SELECT COALESCE(name, 'N/A') FROM users;"
+    },
+    {
+      "code": "S2PG-FN-002", "name": "GETDATE → CURRENT_TIMESTAMP", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "GETDATE()", "replacementPattern": "CURRENT_TIMESTAMP",
+      "description": "SQL Server GETDATE() 替换为 PG CURRENT_TIMESTAMP",
+      "exampleSqlSource": "SELECT GETDATE();", "exampleSqlTarget": "SELECT CURRENT_TIMESTAMP;"
+    },
+    {
+      "code": "S2PG-FN-003", "name": "DATEADD → + INTERVAL", "category": "BUILTIN_FUNCTION", "severity": "ERROR", "patternType": "FUNCTION",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "DATEADD(${unit}, ${n}, ${date})", "replacementPattern": "${date} + INTERVAL '${n} ${unit}'",
+      "description": "SQL Server DATEADD 替换为 PG INTERVAL 运算",
+      "exampleSqlSource": "SELECT DATEADD(day, 7, created_at) FROM orders;", "exampleSqlTarget": "SELECT created_at + INTERVAL '7 days' FROM orders;"
+    },
+    {
+      "code": "S2PG-FN-004", "name": "DATEDIFF → 减法", "category": "BUILTIN_FUNCTION", "severity": "ERROR", "patternType": "FUNCTION",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "DATEDIFF(${unit}, ${d1}, ${d2})", "replacementPattern": "EXTRACT(EPOCH FROM (${d2} - ${d1}))",
+      "description": "SQL Server DATEDIFF 替换为 PG 日期减法+EXTRACT",
+      "exampleSqlSource": "SELECT DATEDIFF(day, start_date, end_date) FROM tasks;", "exampleSqlTarget": "SELECT EXTRACT(DAY FROM end_date - start_date) FROM tasks;"
+    },
+    {
+      "code": "S2PG-FN-005", "name": "CHARINDEX → POSITION", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "CHARINDEX(${substr}, ${str})", "replacementPattern": "POSITION(${substr} IN ${str})",
+      "description": "SQL Server CHARINDEX 替换为 PG POSITION",
+      "exampleSqlSource": "SELECT CHARINDEX('a', name) FROM users;", "exampleSqlTarget": "SELECT POSITION('a' IN name) FROM users;"
+    },
+    {
+      "code": "S2PG-FN-006", "name": "LEN → LENGTH", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "LEN(${str})", "replacementPattern": "LENGTH(${str})",
+      "description": "SQL Server LEN 替换为 PG LENGTH",
+      "exampleSqlSource": "SELECT LEN(name) FROM users;", "exampleSqlTarget": "SELECT LENGTH(name) FROM users;"
+    },
+    {
+      "code": "S2PG-FN-007", "name": "IIF → CASE WHEN", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "IIF(${cond}, ${t}, ${f})", "replacementPattern": "CASE WHEN ${cond} THEN ${t} ELSE ${f} END",
+      "description": "SQL Server IIF 替换为 PG CASE WHEN",
+      "exampleSqlSource": "SELECT IIF(age>18, 'Adult', 'Child') FROM users;", "exampleSqlTarget": "SELECT CASE WHEN age>18 THEN 'Adult' ELSE 'Child' END FROM users;"
+    },
+    {
+      "code": "S2PG-FN-008", "name": "NEWID → gen_random_uuid", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "NEWID()", "replacementPattern": "gen_random_uuid()",
+      "description": "SQL Server NEWID() 替换为 PG gen_random_uuid()",
+      "exampleSqlSource": "INSERT INTO t (id) VALUES (NEWID());", "exampleSqlTarget": "INSERT INTO t (id) VALUES (gen_random_uuid());"
+    },
+    {
+      "code": "S2PG-FN-009", "name": "SCOPE_IDENTITY → lastval", "category": "BUILTIN_FUNCTION", "severity": "ERROR", "patternType": "FUNCTION",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "SCOPE_IDENTITY()", "replacementPattern": "lastval()",
+      "description": "SQL Server SCOPE_IDENTITY() 替换为 PG lastval()",
+      "exampleSqlSource": "SELECT SCOPE_IDENTITY();", "exampleSqlTarget": "SELECT lastval();"
+    },
+    {
+      "code": "S2PG-FN-010", "name": "CONVERT → CAST", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "CONVERT(${type}, ${expr})", "replacementPattern": "CAST(${expr} AS ${type})",
+      "description": "SQL Server CONVERT 替换为 PG CAST",
+      "exampleSqlSource": "SELECT CONVERT(VARCHAR, 123);", "exampleSqlTarget": "SELECT CAST(123 AS VARCHAR);"
+    },
+    {
+      "code": "S2PG-FN-011", "name": "字符串拼接 + → ||", "category": "BUILTIN_FUNCTION", "severity": "ERROR", "patternType": "FUNCTION",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "${a} + ${b}", "replacementPattern": "${a} || ${b}",
+      "description": "SQL Server 字符串 + 拼接替换为 PG || 运算符",
+      "exampleSqlSource": "SELECT first_name + ' ' + last_name FROM users;", "exampleSqlTarget": "SELECT first_name || ' ' || last_name FROM users;"
+    },
+    {
+      "code": "S2PG-FN-012", "name": "STUFF → OVERLAY", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "STUFF(${str}, ${start}, ${len}, ${repl})", "replacementPattern": "OVERLAY(${str} PLACING ${repl} FROM ${start} FOR ${len})",
+      "description": "SQL Server STUFF 替换为 PG OVERLAY",
+      "exampleSqlSource": "SELECT STUFF(name, 1, 2, 'XX') FROM users;", "exampleSqlTarget": "SELECT OVERLAY(name PLACING 'XX' FROM 1 FOR 2) FROM users;"
+    },
+    {
+      "code": "S2PG-SYN-001", "name": "TOP → LIMIT", "category": "SYNTAX", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "SELECT TOP ${n}", "replacementPattern": "SELECT ... LIMIT ${n}",
+      "description": "SQL Server SELECT TOP n 替换为 PG SELECT ... LIMIT n",
+      "exampleSqlSource": "SELECT TOP 10 * FROM users;", "exampleSqlTarget": "SELECT * FROM users LIMIT 10;"
+    },
+    {
+      "code": "S2PG-SYN-002", "name": "方括号 → 双引号", "category": "SYNTAX", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "[", "replacementPattern": "\"",
+      "description": "SQL Server 方括号 [identifier] 替换为 PG 双引号",
+      "exampleSqlSource": "SELECT [id], [name] FROM [users];", "exampleSqlTarget": "SELECT \"id\", \"name\" FROM \"users\";"
+    },
+    {
+      "code": "S2PG-SYN-003", "name": "OFFSET FETCH → LIMIT OFFSET", "category": "SYNTAX", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "OFFSET ${m} ROWS FETCH NEXT ${n} ROWS ONLY", "replacementPattern": "LIMIT ${n} OFFSET ${m}",
+      "description": "SQL Server OFFSET FETCH 替换为 PG LIMIT OFFSET",
+      "exampleSqlSource": "SELECT * FROM users ORDER BY id OFFSET 10 ROWS FETCH NEXT 20 ROWS ONLY;", "exampleSqlTarget": "SELECT * FROM users ORDER BY id LIMIT 20 OFFSET 10;"
+    },
+    {
+      "code": "S2PG-SYN-004", "name": "IDENTITY → SERIAL", "category": "SYNTAX", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "IDENTITY(1,1)", "replacementPattern": "SERIAL",
+      "description": "SQL Server IDENTITY(1,1) 替换为 PG SERIAL",
+      "exampleSqlSource": "CREATE TABLE t (id INT IDENTITY(1,1) PRIMARY KEY);", "exampleSqlTarget": "CREATE TABLE t (id SERIAL PRIMARY KEY);"
+    },
+    {
+      "code": "S2PG-SYN-005", "name": "WITH NOLOCK → 移除", "category": "SYNTAX", "severity": "INFO", "patternType": "SYNTAX",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "WITH (NOLOCK)", "replacementPattern": "",
+      "description": "SQL Server WITH(NOLOCK) 在 PG 中不存在(MVCC代替)，需移除",
+      "exampleSqlSource": "SELECT * FROM users WITH (NOLOCK);", "exampleSqlTarget": "SELECT * FROM users;"
+    },
+    {
+      "code": "S2PG-SYN-006", "name": "MERGE → INSERT ON CONFLICT", "category": "SYNTAX", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "MERGE INTO", "replacementPattern": "INSERT INTO ... ON CONFLICT DO UPDATE",
+      "description": "SQL Server MERGE 替换为 PG INSERT ON CONFLICT (PG15+支持MERGE)",
+      "exampleSqlSource": "MERGE INTO t USING s ON t.id=s.id WHEN MATCHED THEN UPDATE SET ...;", "exampleSqlTarget": "INSERT INTO t SELECT * FROM s ON CONFLICT (id) DO UPDATE SET ...;"
+    },
+    {
+      "code": "S2PG-DT-001", "name": "NVARCHAR → VARCHAR", "category": "DATATYPE", "severity": "WARNING", "patternType": "DATATYPE",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "NVARCHAR", "replacementPattern": "VARCHAR",
+      "description": "SQL Server NVARCHAR 映射为 PG VARCHAR",
+      "exampleSqlSource": "CREATE TABLE t (name NVARCHAR(100));", "exampleSqlTarget": "CREATE TABLE t (name VARCHAR(100));"
+    },
+    {
+      "code": "S2PG-DT-002", "name": "DATETIME2 → TIMESTAMP", "category": "DATATYPE", "severity": "WARNING", "patternType": "DATATYPE",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "DATETIME2", "replacementPattern": "TIMESTAMP",
+      "description": "SQL Server DATETIME2 映射为 PG TIMESTAMP",
+      "exampleSqlSource": "CREATE TABLE t (created DATETIME2);", "exampleSqlTarget": "CREATE TABLE t (created TIMESTAMP);"
+    },
+    {
+      "code": "S2PG-DT-003", "name": "MONEY → NUMERIC", "category": "DATATYPE", "severity": "WARNING", "patternType": "DATATYPE",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "MONEY", "replacementPattern": "NUMERIC(19,4)",
+      "description": "SQL Server MONEY 映射为 PG NUMERIC(19,4)",
+      "exampleSqlSource": "CREATE TABLE t (amount MONEY);", "exampleSqlTarget": "CREATE TABLE t (amount NUMERIC(19,4));"
+    },
+    {
+      "code": "S2PG-DT-004", "name": "BIT → BOOLEAN", "category": "DATATYPE", "severity": "WARNING", "patternType": "DATATYPE",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "BIT", "replacementPattern": "BOOLEAN",
+      "description": "SQL Server BIT 映射为 PG BOOLEAN",
+      "exampleSqlSource": "CREATE TABLE t (flag BIT);", "exampleSqlTarget": "CREATE TABLE t (flag BOOLEAN);"
+    },
+    {
+      "code": "S2PG-DT-005", "name": "IMAGE → BYTEA", "category": "DATATYPE", "severity": "WARNING", "patternType": "DATATYPE",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "IMAGE", "replacementPattern": "BYTEA",
+      "description": "SQL Server IMAGE 映射为 PG BYTEA",
+      "exampleSqlSource": "CREATE TABLE t (photo IMAGE);", "exampleSqlTarget": "CREATE TABLE t (photo BYTEA);"
+    },
+    {
+      "code": "S2PG-DDL-001", "name": "CREATE PROCEDURE 语法", "category": "DDL", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "CREATE PROCEDURE", "replacementPattern": "CREATE OR REPLACE PROCEDURE",
+      "description": "SQL Server CREATE PROCEDURE 改为 PG CREATE OR REPLACE PROCEDURE",
+      "exampleSqlSource": "CREATE PROCEDURE usp_test AS BEGIN SELECT 1 END", "exampleSqlTarget": "CREATE OR REPLACE PROCEDURE usp_test() AS $$ BEGIN SELECT 1; END; $$ LANGUAGE plpgsql;"
+    },
+    {
+      "code": "S2PG-OTH-001", "name": "EXEC → SELECT/CALL", "category": "OTHER", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "EXEC", "replacementPattern": "CALL",
+      "description": "SQL Server EXEC 执行存储过程替换为 PG CALL",
+      "exampleSqlSource": "EXEC usp_test @param=1;", "exampleSqlTarget": "CALL usp_test(1);"
+    },
+    {
+      "code": "S2PG-OTH-002", "name": "临时表 # → TEMP TABLE", "category": "OTHER", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "CREATE TABLE #", "replacementPattern": "CREATE TEMP TABLE",
+      "description": "SQL Server 临时表 #name 替换为 PG CREATE TEMP TABLE",
+      "exampleSqlSource": "CREATE TABLE #tmp (id INT);", "exampleSqlTarget": "CREATE TEMP TABLE tmp (id INT);"
+    },
+    {
+      "code": "S2PG-OTH-003", "name": "PRINT → RAISE NOTICE", "category": "OTHER", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "SQLSERVER", "targetDbType": "POSTGRESQL",
+      "matchPattern": "PRINT", "replacementPattern": "RAISE NOTICE",
+      "description": "SQL Server PRINT 替换为 PG RAISE NOTICE",
+      "exampleSqlSource": "PRINT 'Hello World';", "exampleSqlTarget": "RAISE NOTICE 'Hello World';"
+    }
+  ]
+}

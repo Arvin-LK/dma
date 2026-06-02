@@ -1,0 +1,214 @@
+{
+  "meta": {
+    "sourceDb": "MYSQL",
+    "targetDb": "GAUSSDB",
+    "version": "1.0.0",
+    "description": "MySQL 到 GaussDB 迁移兼容性规则集",
+    "author": "DMA Team"
+  },
+  "rules": [
+    {
+      "code": "M2GDB-FN-001", "name": "IFNULL → COALESCE", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "IFNULL(${expr1}, ${expr2})", "replacementPattern": "COALESCE(${expr1}, ${expr2})",
+      "description": "MySQL IFNULL 函数需替换为 GaussDB COALESCE 函数",
+      "exampleSqlSource": "SELECT IFNULL(name, 'N/A') FROM users;", "exampleSqlTarget": "SELECT COALESCE(name, 'N/A') FROM users;"
+    },
+    {
+      "code": "M2GDB-FN-002", "name": "NOW() → CURRENT_TIMESTAMP", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "NOW()", "replacementPattern": "CURRENT_TIMESTAMP",
+      "description": "MySQL NOW() 在 GaussDB 中建议使用 CURRENT_TIMESTAMP 或 SYSDATE",
+      "exampleSqlSource": "SELECT NOW();", "exampleSqlTarget": "SELECT CURRENT_TIMESTAMP;"
+    },
+    {
+      "code": "M2GDB-FN-003", "name": "GROUP_CONCAT → STRING_AGG/LISTAGG", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "GROUP_CONCAT(${expr} SEPARATOR ${sep})", "replacementPattern": "STRING_AGG(${expr}, ${sep})",
+      "description": "MySQL GROUP_CONCAT 替换为 GaussDB STRING_AGG 或 LISTAGG",
+      "exampleSqlSource": "SELECT GROUP_CONCAT(name SEPARATOR ',') FROM users;", "exampleSqlTarget": "SELECT STRING_AGG(name, ',') FROM users;"
+    },
+    {
+      "code": "M2GDB-FN-004", "name": "DATE_FORMAT → TO_CHAR", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "DATE_FORMAT(${date}, ${format})", "replacementPattern": "TO_CHAR(${date}, ${format})",
+      "description": "MySQL DATE_FORMAT 替换为 GaussDB TO_CHAR，格式字符串需调整",
+      "exampleSqlSource": "SELECT DATE_FORMAT(created_at, '%Y-%m-%d') FROM orders;", "exampleSqlTarget": "SELECT TO_CHAR(created_at, 'YYYY-MM-DD') FROM orders;"
+    },
+    {
+      "code": "M2GDB-FN-005", "name": "UNIX_TIMESTAMP → EXTRACT", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "UNIX_TIMESTAMP(${expr})", "replacementPattern": "EXTRACT(EPOCH FROM ${expr})",
+      "description": "MySQL UNIX_TIMESTAMP 替换为 GaussDB EXTRACT(EPOCH FROM ...)",
+      "exampleSqlSource": "SELECT UNIX_TIMESTAMP(created_at) FROM orders;", "exampleSqlTarget": "SELECT EXTRACT(EPOCH FROM created_at) FROM orders;"
+    },
+    {
+      "code": "M2GDB-FN-006", "name": "FIND_IN_SET → 数组操作", "category": "BUILTIN_FUNCTION", "severity": "ERROR", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "FIND_IN_SET(${str}, ${list})", "replacementPattern": "string_to_array(${list}, ',') @> ARRAY[${str}]",
+      "description": "MySQL FIND_IN_SET 需重写为 GaussDB 数组操作，需人工审核",
+      "exampleSqlSource": "SELECT * FROM t WHERE FIND_IN_SET('a', tags);", "exampleSqlTarget": "SELECT * FROM t WHERE string_to_array(tags, ',') @> ARRAY['a'];"
+    },
+    {
+      "code": "M2GDB-FN-007", "name": "STR_TO_DATE → TO_DATE", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "STR_TO_DATE(${str}, ${format})", "replacementPattern": "TO_DATE(${str}, ${format})",
+      "description": "MySQL STR_TO_DATE 替换为 GaussDB TO_DATE",
+      "exampleSqlSource": "SELECT STR_TO_DATE('2024-01-01', '%Y-%m-%d');", "exampleSqlTarget": "SELECT TO_DATE('2024-01-01', 'YYYY-MM-DD');"
+    },
+    {
+      "code": "M2GDB-FN-008", "name": "UUID → sys_guid()", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "UUID()", "replacementPattern": "sys_guid()",
+      "description": "MySQL UUID() 替换为 GaussDB sys_guid()",
+      "exampleSqlSource": "INSERT INTO t (id) VALUES (UUID());", "exampleSqlTarget": "INSERT INTO t (id) VALUES (sys_guid());"
+    },
+    {
+      "code": "M2GDB-FN-009", "name": "LAST_INSERT_ID → lastval", "category": "BUILTIN_FUNCTION", "severity": "ERROR", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "LAST_INSERT_ID()", "replacementPattern": "lastval()",
+      "description": "MySQL LAST_INSERT_ID() 替换为 GaussDB lastval()，语义有差异需验证",
+      "exampleSqlSource": "SELECT LAST_INSERT_ID();", "exampleSqlTarget": "SELECT lastval();"
+    },
+    {
+      "code": "M2GDB-FN-010", "name": "SLEEP → pg_sleep", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "SLEEP(${n})", "replacementPattern": "pg_sleep(${n})",
+      "description": "MySQL SLEEP 替换为 GaussDB pg_sleep",
+      "exampleSqlSource": "SELECT SLEEP(1);", "exampleSqlTarget": "SELECT pg_sleep(1);"
+    },
+    {
+      "code": "M2GDB-FN-011", "name": "REGEXP → ~ 运算符", "category": "BUILTIN_FUNCTION", "severity": "WARNING", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "${col} REGEXP ${pattern}", "replacementPattern": "${col} ~ ${pattern}",
+      "description": "MySQL col REGEXP pattern 替换为 GaussDB col ~ pattern",
+      "exampleSqlSource": "SELECT * FROM t WHERE name REGEXP '^A';", "exampleSqlTarget": "SELECT * FROM t WHERE name ~ '^A';"
+    },
+    {
+      "code": "M2GDB-FN-012", "name": "CONCAT_WS（兼容）", "category": "BUILTIN_FUNCTION", "severity": "INFO", "patternType": "FUNCTION",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "CONCAT_WS(${sep}, ${exprs})", "replacementPattern": "CONCAT_WS(${sep}, ${exprs})",
+      "description": "MySQL CONCAT_WS 在 GaussDB 中兼容",
+      "exampleSqlSource": "SELECT CONCAT_WS('-', a, b) FROM t;", "exampleSqlTarget": "SELECT CONCAT_WS('-', a, b) FROM t;"
+    },
+    {
+      "code": "M2GDB-SYN-001", "name": "LIMIT m,n → LIMIT n OFFSET m", "category": "SYNTAX", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "LIMIT ${offset}, ${count}", "replacementPattern": "LIMIT ${count} OFFSET ${offset}",
+      "description": "MySQL LIMIT offset,count 转换为 GaussDB LIMIT count OFFSET offset",
+      "exampleSqlSource": "SELECT * FROM users LIMIT 10, 20;", "exampleSqlTarget": "SELECT * FROM users LIMIT 20 OFFSET 10;"
+    },
+    {
+      "code": "M2GDB-SYN-002", "name": "反引号 → 双引号", "category": "SYNTAX", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "`", "replacementPattern": "\"",
+      "description": "MySQL 反引号在 GaussDB 中需替换为双引号",
+      "exampleSqlSource": "SELECT `id`, `name` FROM `users`;", "exampleSqlTarget": "SELECT \"id\", \"name\" FROM \"users\";"
+    },
+    {
+      "code": "M2GDB-SYN-003", "name": "AUTO_INCREMENT → SERIAL/IDENTITY", "category": "SYNTAX", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "INT AUTO_INCREMENT", "replacementPattern": "SERIAL",
+      "description": "MySQL AUTO_INCREMENT 替换为 GaussDB SERIAL 或 GENERATED BY DEFAULT AS IDENTITY",
+      "exampleSqlSource": "CREATE TABLE t (id INT AUTO_INCREMENT PRIMARY KEY);", "exampleSqlTarget": "CREATE TABLE t (id SERIAL PRIMARY KEY);"
+    },
+    {
+      "code": "M2GDB-SYN-004", "name": "ENGINE → 移除", "category": "SYNTAX", "severity": "INFO", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "ENGINE=${engine}", "replacementPattern": "",
+      "description": "MySQL ENGINE 子句在 GaussDB 中不存在，需移除",
+      "exampleSqlSource": "CREATE TABLE t (id INT) ENGINE=InnoDB;", "exampleSqlTarget": "CREATE TABLE t (id INT);"
+    },
+    {
+      "code": "M2GDB-SYN-005", "name": "REPLACE INTO → INSERT ON CONFLICT", "category": "SYNTAX", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "REPLACE INTO ${table}", "replacementPattern": "INSERT INTO ${table} ... ON DUPLICATE KEY UPDATE",
+      "description": "MySQL REPLACE INTO 替换为 GaussDB INSERT ON DUPLICATE KEY 或 MERGE INTO",
+      "exampleSqlSource": "REPLACE INTO users (id,name) VALUES (1,'Alice');", "exampleSqlTarget": "INSERT INTO users (id,name) VALUES (1,'Alice') ON DUPLICATE KEY UPDATE name='Alice';"
+    },
+    {
+      "code": "M2GDB-SYN-006", "name": "SHOW TABLES → 系统表", "category": "SYNTAX", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "SHOW TABLES", "replacementPattern": "SELECT tablename FROM pg_tables WHERE schemaname='public'",
+      "description": "MySQL SHOW TABLES 替换为 GaussDB 系统表查询",
+      "exampleSqlSource": "SHOW TABLES;", "exampleSqlTarget": "SELECT tablename FROM pg_tables WHERE schemaname='public';"
+    },
+    {
+      "code": "M2GDB-DT-001", "name": "DATETIME → TIMESTAMP", "category": "DATATYPE", "severity": "WARNING", "patternType": "DATATYPE",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "DATETIME", "replacementPattern": "TIMESTAMP",
+      "description": "MySQL DATETIME 映射为 GaussDB TIMESTAMP",
+      "exampleSqlSource": "CREATE TABLE t (created_at DATETIME);", "exampleSqlTarget": "CREATE TABLE t (created_at TIMESTAMP);"
+    },
+    {
+      "code": "M2GDB-DT-002", "name": "TINYINT → SMALLINT", "category": "DATATYPE", "severity": "WARNING", "patternType": "DATATYPE",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "TINYINT", "replacementPattern": "SMALLINT",
+      "description": "MySQL TINYINT 映射为 GaussDB SMALLINT",
+      "exampleSqlSource": "CREATE TABLE t (flag TINYINT);", "exampleSqlTarget": "CREATE TABLE t (flag SMALLINT);"
+    },
+    {
+      "code": "M2GDB-DT-003", "name": "MEDIUMTEXT → TEXT", "category": "DATATYPE", "severity": "INFO", "patternType": "DATATYPE",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "MEDIUMTEXT", "replacementPattern": "TEXT",
+      "description": "MySQL MEDIUMTEXT 在 GaussDB 中使用 TEXT",
+      "exampleSqlSource": "CREATE TABLE t (content MEDIUMTEXT);", "exampleSqlTarget": "CREATE TABLE t (content TEXT);"
+    },
+    {
+      "code": "M2GDB-DT-004", "name": "BLOB → BYTEA", "category": "DATATYPE", "severity": "WARNING", "patternType": "DATATYPE",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "BLOB", "replacementPattern": "BYTEA",
+      "description": "MySQL BLOB 映射为 GaussDB BYTEA",
+      "exampleSqlSource": "CREATE TABLE t (data BLOB);", "exampleSqlTarget": "CREATE TABLE t (data BYTEA);"
+    },
+    {
+      "code": "M2GDB-DT-005", "name": "UNSIGNED → CHECK", "category": "DATATYPE", "severity": "WARNING", "patternType": "DATATYPE",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "INT UNSIGNED", "replacementPattern": "INT CHECK (${col} >= 0)",
+      "description": "MySQL UNSIGNED 通过 GaussDB CHECK 约束实现",
+      "exampleSqlSource": "CREATE TABLE t (age INT UNSIGNED);", "exampleSqlTarget": "CREATE TABLE t (age INT CHECK (age >= 0));"
+    },
+    {
+      "code": "M2GDB-DDL-001", "name": "TEMPORARY TABLE → TEMP TABLE", "category": "DDL", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "CREATE TEMPORARY TABLE", "replacementPattern": "CREATE TEMP TABLE",
+      "description": "MySQL CREATE TEMPORARY TABLE 改为 GaussDB CREATE TEMP TABLE",
+      "exampleSqlSource": "CREATE TEMPORARY TABLE tmp (id INT);", "exampleSqlTarget": "CREATE TEMP TABLE tmp (id INT);"
+    },
+    {
+      "code": "M2GDB-DDL-002", "name": "ALTER MODIFY → ALTER ALTER", "category": "DDL", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "ALTER TABLE ${table} MODIFY COLUMN", "replacementPattern": "ALTER TABLE ${table} ALTER COLUMN",
+      "description": "MySQL ALTER MODIFY COLUMN 改为 GaussDB ALTER ALTER COLUMN",
+      "exampleSqlSource": "ALTER TABLE users MODIFY COLUMN name VARCHAR(100);", "exampleSqlTarget": "ALTER TABLE users ALTER COLUMN name TYPE VARCHAR(100);"
+    },
+    {
+      "code": "M2GDB-OTH-001", "name": "USE database → SET search_path", "category": "OTHER", "severity": "WARNING", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "USE ${db}", "replacementPattern": "SET search_path TO ${db}",
+      "description": "MySQL USE database 替换为 GaussDB SET search_path TO schema",
+      "exampleSqlSource": "USE mydb;", "exampleSqlTarget": "SET search_path TO mydb;"
+    },
+    {
+      "code": "M2GDB-OTH-002", "name": "LOCK TABLES → 事务", "category": "OTHER", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "LOCK TABLES", "replacementPattern": "",
+      "description": "MySQL LOCK TABLES 在 GaussDB 中由事务隔离级别替代",
+      "exampleSqlSource": "LOCK TABLES users WRITE;", "exampleSqlTarget": "BEGIN; LOCK TABLE users IN EXCLUSIVE MODE;"
+    },
+    {
+      "code": "M2GDB-OTH-003", "name": "MySQL # 注释 → --", "category": "OTHER", "severity": "INFO", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "#", "replacementPattern": "--",
+      "description": "MySQL # 单行注释改为 GaussDB -- 注释",
+      "exampleSqlSource": "SELECT * FROM t; # 注释", "exampleSqlTarget": "SELECT * FROM t; -- 注释"
+    },
+    {
+      "code": "M2GDB-OTH-004", "name": "分布式表语法适配", "category": "OTHER", "severity": "ERROR", "patternType": "SYNTAX",
+      "sourceDbType": "MYSQL", "targetDbType": "GAUSSDB",
+      "matchPattern": "CREATE TABLE ${name}", "replacementPattern": "",
+      "description": "⚠ GaussDB 分布式部署需指定分布键 DISTRIBUTE BY HASH(col)，请人工确认",
+      "exampleSqlSource": "CREATE TABLE users (id INT, name VARCHAR(100));", "exampleSqlTarget": "CREATE TABLE users (id INT, name VARCHAR(100)) DISTRIBUTE BY HASH(id);"
+    }
+  ]
+}
