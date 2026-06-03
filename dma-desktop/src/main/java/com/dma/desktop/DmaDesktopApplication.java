@@ -222,7 +222,7 @@ public class DmaDesktopApplication extends Application {
         statusLeft = slbl("就绪", "#6b7280");
         Region sp = new Region(); HBox.setHgrow(sp, Priority.ALWAYS);
         statusApi  = slbl("API: --", "#9ca3af");
-        statusRules = slbl("规则: 200+", "#9ca3af");
+        statusRules = slbl("规则: 322", "#9ca3af");
         bar.getChildren().addAll(statusLeft, sp, statusApi, statusRules);
         return bar;
     }
