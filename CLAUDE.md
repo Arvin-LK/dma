@@ -4,13 +4,14 @@
 
 ## 环境要求
 
-- **JDK**: 必须使用 JDK 17，路径 `D:/DEV_Application/Java/jdk17`
-- **编译命令**: `export JAVA_HOME="D:/DEV_Application/Java/jdk17" && mvn compile`
-- **安装命令**: `export JAVA_HOME="D:/DEV_Application/Java/jdk17" && mvn install -DskipTests`
+- **JDK**: JDK 17（`JAVA_HOME` 指向 JDK 17 安装目录）
+- **编译**: `./mvnw compile`（无需全局安装 Maven，使用项目自带 wrapper）
+- **测试**: `./mvnw test`（当前 26/26 通过）
 - **运行方式一（推荐）**: 双击 `run.bat`，自动编译安装并启动
-- **运行方式二（IDEA）**: 先执行 `mvn install -DskipTests`，再右键 `DmaLauncher` → Run
-- **运行方式三（Maven）**: `mvn javafx:run -pl dma-desktop`
-- **API 端口**: Spring Boot 默认 `8080`，Swagger 未配置
+- **运行方式二（IDEA）**: 先执行 `./mvnw install -DskipTests`，再右键 `DmaLauncher` → Run
+- **运行方式三（Maven）**: `./mvnw javafx:run -pl dma-desktop`
+- **打包 .exe**: 双击 `package.bat`，产出 `dist/DMA/DMA.exe`（自包含 JRE，无需安装 Java）
+- **API 端口**: Spring Boot 默认 `8080`
 
 ## 项目结构速查
 
@@ -21,9 +22,12 @@ dma/
 ├── dma-common/      # 公共模块（枚举/异常/DTO/工具类）
 ├── dma-core/        # 核心模块（DDD四层：api/application/domain/infrastructure）
 ├── dma-desktop/     # JavaFX 桌面端
-├── dma-idea-plugin/ # IDEA 插件（后续）
-├── dma-test/        # 集成测试
+├── dma-idea-plugin/ # IDEA 插件（骨架）
+├── dma-test/        # 集成测试（26个测试用例）
 ├── CLAUDE.md        # 本文件 — AI 助手指引
+├── run.bat          # Windows 一键启动
+├── package.bat      # Windows .exe 打包
+├── mvnw / mvnw.cmd  # Maven Wrapper（无需安装 Maven）
 └── pom.xml          # 父 POM
 ```
 
@@ -115,6 +119,21 @@ dma/
 |------|------|---------|
 | MVP 数据库范围 | MySQL→PG, Oracle→PG, MySQL→达梦 | [MVP 范围定义](docs/requirements/mvp-scope.md) |
 | 产品形态优先级 | 先 JavaFX 桌面端，IDEA 插件后续 | [MVP 范围定义](docs/requirements/mvp-scope.md) |
-| AI 接入方式 | 云端 API 优先，MVP 预留接口 | [系统架构总览](docs/architecture/system-architecture.md) |
+| AI 接入方式 | 本地 + 云端均支持（Ollama/OpenAI/通义千问/DeepSeek/vLLM）| [系统架构总览](docs/architecture/system-architecture.md) |
 | 商业化路径 | IDEA 插件免费获客，桌面端/高级功能付费 | [系统架构总览](docs/architecture/system-architecture.md) |
-| 规则存储 | MVP 用 JSON 文件，后续迁移至 SQLite | [数据库设计](docs/architecture/database-design.md) |
+| 规则存储 | JSON 文件（322条规则，15条路径） | [数据库设计](docs/architecture/database-design.md) |
+| 密码安全 | AES-256-GCM 加密存储 | `CryptoUtil.java` |
+| Windows 打包 | jpackage + thin JAR + 依赖目录 | `package.bat` |
+
+## 当前项目状态
+
+| 指标 | 数值 |
+|------|------|
+| 兼容性规则 | 322 条（15 条迁移路径全覆盖） |
+| 测试用例 | 26（全部通过） |
+| Maven 模块 | 6 |
+| REST API 端点 | 15 |
+| SPI 扩展点 | 8（全部有实现） |
+| JDBC 驱动 | MySQL / PostgreSQL / Oracle / SQLServer / SQLite |
+| 密码加密 | AES-256-GCM |
+| 异常处理 | GlobalExceptionHandler（8种异常类型） |

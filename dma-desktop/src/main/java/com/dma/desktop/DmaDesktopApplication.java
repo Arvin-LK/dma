@@ -260,9 +260,9 @@ public class DmaDesktopApplication extends Application {
         // 统计卡片行
         HBox stats = new HBox(14);
         stats.getChildren().addAll(
-            statCard("200+", "兼容性规则", "#1a73e8"),
-            statCard("8", "迁移路径", "#7c3aed"),
-            statCard("19/19", "测试通过", "#059669"),
+            statCard("322", "兼容性规则", "#1a73e8"),
+            statCard("15", "迁移路径", "#7c3aed"),
+            statCard("26/26", "测试通过", "#059669"),
             statCard("3", "报告格式", "#d97706")
         );
         root.getChildren().add(stats);
@@ -538,7 +538,7 @@ public class DmaDesktopApplication extends Application {
                         .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
                 String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
                 Platform.runLater(() -> { dbProgress.setVisible(false); statusLeft.setText("扫描完成"); dbResult.setText(formatScan(resp)); });
-            } catch (Exception e) { Platform.runLater(() -> { dbProgress.setVisible(false); statusLeft.setText("扫描失败"); }); }
+            } catch (Exception e) { log.error("Database scan failed", e); Platform.runLater(() -> { dbProgress.setVisible(false); statusLeft.setText("扫描失败: " + e.getMessage()); }); }
         }).start();
     }
 
@@ -557,7 +557,7 @@ public class DmaDesktopApplication extends Application {
                         .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
                 String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
                 Platform.runLater(() -> { statusLeft.setText("转换完成"); sqlResult.setText(formatSql(resp, sql)); });
-            } catch (Exception e) { Platform.runLater(() -> statusLeft.setText("转换失败")); }
+            } catch (Exception e) { Platform.runLater(() -> statusLeft.setText("转换失败: " + e.getMessage())); }
         }).start();
     }
 
@@ -576,7 +576,7 @@ public class DmaDesktopApplication extends Application {
                         .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
                 String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
                 Platform.runLater(() -> { statusLeft.setText("转换完成"); spResult.setText(formatSp(resp)); });
-            } catch (Exception e) { Platform.runLater(() -> statusLeft.setText("转换失败")); }
+            } catch (Exception e) { Platform.runLater(() -> statusLeft.setText("转换失败: " + e.getMessage())); }
         }).start();
     }
 
@@ -594,7 +594,7 @@ public class DmaDesktopApplication extends Application {
                         .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
                 String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
                 Platform.runLater(() -> { projProgress.setVisible(false); statusLeft.setText("扫描完成"); projResult.setText(formatProj(resp)); });
-            } catch (Exception e) { Platform.runLater(() -> { projProgress.setVisible(false); statusLeft.setText("扫描失败"); }); }
+            } catch (Exception e) { Platform.runLater(() -> { projProgress.setVisible(false); statusLeft.setText("扫描失败: " + e.getMessage()); }); }
         }).start();
     }
 
@@ -632,7 +632,7 @@ public class DmaDesktopApplication extends Application {
                     aiResult.setText("🤖 AI 建议:\n\n" + data.replace("\\n", "\n").replace("\\t", "    "));
                     statusLeft.setText("AI 回复就绪");
                 });
-            } catch (Exception e) { Platform.runLater(() -> statusLeft.setText("AI 请求失败")); }
+            } catch (Exception e) { Platform.runLater(() -> statusLeft.setText("AI 请求失败: " + e.getMessage())); }
         }).start();
     }
 
@@ -799,7 +799,7 @@ public class DmaDesktopApplication extends Application {
                 java.nio.file.Files.write(fp, data);
                 new Thread(() -> { try { java.awt.Desktop.getDesktop().open(fp.toFile()); } catch (Exception ignored) {} }).start();
                 Platform.runLater(() -> statusLeft.setText("已导出: " + fn));
-            } catch (Exception ignored) {}
+            } catch (Exception e) { log.error("Export failed", e); Platform.runLater(() -> statusLeft.setText("导出失败: " + e.getMessage())); }
         }).start();
     }
 
