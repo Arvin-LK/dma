@@ -46,6 +46,10 @@ dma:
       url: http://localhost:8000/v1
       api-key: ""
       model: deepseek-r1:8b
+  # 安全配置
+  security:
+    encryption-key: "DMA@2024!SecureKey#X"
+
   # License 配置（预留）
   license:
     enabled: false

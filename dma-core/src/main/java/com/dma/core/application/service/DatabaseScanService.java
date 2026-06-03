@@ -149,9 +149,9 @@ public class DatabaseScanService {
             case MYSQL -> String.format("jdbc:mysql://%s:%d/%s?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC", host, port, database);
             case ORACLE -> String.format("jdbc:oracle:thin:@%s:%d:%s", host, port, database);
             case SQLSERVER -> String.format("jdbc:sqlserver://%s:%d;databaseName=%s;encrypt=false;trustServerCertificate=true", host, port, database);
-            case POSTGRESQL -> String.format("jdbc:postgresql://%s:%d/%s", host, port, database);
+            case POSTGRESQL, GAUSSDB -> String.format("jdbc:postgresql://%s:%d/%s", host, port, database);
             case DAMENG -> String.format("jdbc:dm://%s:%d/%s", host, port, database);
-            default -> throw new UnsupportedOperationException("Unknown JDBC URL for: " + dbType);
+            case OCEANBASE, GOLDENDB -> String.format("jdbc:mysql://%s:%d/%s?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC", host, port, database);
         };
     }
 

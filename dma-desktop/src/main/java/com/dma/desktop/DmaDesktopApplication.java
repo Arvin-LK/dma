@@ -12,6 +12,8 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ConfigurableApplicationContext;
 
@@ -25,16 +27,18 @@ import java.util.regex.Pattern;
 
 public class DmaDesktopApplication extends Application {
 
+    private static final Logger log = LoggerFactory.getLogger(DmaDesktopApplication.class);
+
     private ConfigurableApplicationContext springContext;
     private HttpClient httpClient;
-    private Label statusLeft, statusConn, statusRules, statusApi;
+    private Label statusLeft, statusRules, statusApi;
     private StackPane contentArea;
     private Map<String, Button> navButtons = new LinkedHashMap<>();
     private String currentPage = "dashboard";
 
     // ── 体检页字段 ──
     private TextField dbHost, dbPort, dbUser, dbPassword;
-    private ComboBox<String> dbSchema, dbSource, dbTarget, savedConn;
+    private ComboBox<String> dbSchema, dbSource, dbTarget;
     private TextArea dbResult;
     private ProgressIndicator dbProgress;
     // ── SQL页字段 ──
@@ -51,8 +55,6 @@ public class DmaDesktopApplication extends Application {
     // ── AI页字段 ──
     private TextArea aiInput, aiResult;
     private Label aiStatus;
-    // ── 连接缓存 ──
-    private Map<String, Map<String, String>> savedConns = new HashMap<>();
 
     public static void main(String[] args) { launch(args); }
 
@@ -91,7 +93,6 @@ public class DmaDesktopApplication extends Application {
         stage.show();
 
         refreshStatus();
-        loadSavedConnections();
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -222,8 +223,7 @@ public class DmaDesktopApplication extends Application {
         Region sp = new Region(); HBox.setHgrow(sp, Priority.ALWAYS);
         statusApi  = slbl("API: --", "#9ca3af");
         statusRules = slbl("规则: 200+", "#9ca3af");
-        statusConn  = slbl("连接: --", "#9ca3af");
-        bar.getChildren().addAll(statusLeft, sp, statusApi, statusRules, statusConn);
+        bar.getChildren().addAll(statusLeft, sp, statusApi, statusRules);
         return bar;
     }
 
@@ -236,6 +236,8 @@ public class DmaDesktopApplication extends Application {
             } catch (Exception e) { Platform.runLater(() -> statusApi.setText("⚫ 离线")); }
         }).start();
     }
+
+    // ── 报告导出 ──
 
     // ═══════════════════════════════════════════════════════════════
     // 首页仪表盘
@@ -497,74 +499,6 @@ public class DmaDesktopApplication extends Application {
     // 业务逻辑（与旧版完全相同，保持不变）
     // ═══════════════════════════════════════════════════════════════
 
-    // ── 连接管理 ──
-    private void loadSavedConnections() {
-        new Thread(() -> {
-            try {
-                HttpRequest req = HttpRequest.newBuilder().uri(URI.create("http://localhost:8080/api/v1/connections?page=1&size=50")).GET().build();
-                String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
-                Platform.runLater(() -> {
-                    savedConns.clear(); if (savedConn != null) savedConn.getItems().clear();
-                    for (String obj : resp.split("\\},\\s*\\{")) {
-                        String name = ej(obj, "name"); if (name.isEmpty()) continue;
-                        if (savedConn != null) savedConn.getItems().add(name);
-                        Map<String, String> info = new HashMap<>();
-                        info.put("id", ej(obj, "id")); info.put("dbType", ej(obj, "dbType"));
-                        info.put("host", ej(obj, "host")); info.put("port", ej(obj, "port"));
-                        info.put("username", ej(obj, "username")); info.put("databaseName", ej(obj, "databaseName"));
-                        savedConns.put(name, info);
-                    }
-                    statusConn.setText("连接: " + savedConns.size() + "个");
-                });
-            } catch (Exception ignored) {}
-        }).start();
-    }
-
-    private void onConnSelected() {
-        if (savedConn == null || savedConn.getValue() == null) return;
-        Map<String, String> info = savedConns.get(savedConn.getValue());
-        if (info == null) return;
-        dbHost.setText(info.getOrDefault("host", "localhost"));
-        dbPort.setText(info.getOrDefault("port", "3306"));
-        dbUser.setText(info.getOrDefault("username", "root"));
-        dbPassword.setText("");
-        String dbType = info.getOrDefault("dbType", "MYSQL");
-        if (dbSource.getItems().contains(dbType)) dbSource.setValue(dbType);
-        statusLeft.setText("已加载: " + savedConn.getValue());
-    }
-
-    private void saveConn() {
-        String name = dbSchema.getValue() != null ? dbSchema.getValue() : (dbHost.getText() + "_db");
-        TextInputDialog d = new TextInputDialog(name);
-        d.setTitle("保存连接"); d.setHeaderText("给连接命名");
-        d.showAndWait().ifPresent(n -> new Thread(() -> {
-            try {
-                String body = String.format("""
-{"name":"%s","dbType":"%s","host":"%s","port":%s,"username":"%s","password":"%s","databaseName":"%s"}""",
-                        esc(n), esc(dbSource.getValue()), esc(dbHost.getText()), esc(dbPort.getText()),
-                        esc(dbUser.getText()), esc(dbPassword.getText()), esc(dbSchema.getValue() != null ? dbSchema.getValue() : ""));
-                HttpRequest req = HttpRequest.newBuilder().uri(URI.create("http://localhost:8080/api/v1/connections"))
-                        .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
-                httpClient.send(req, HttpResponse.BodyHandlers.ofString());
-                Platform.runLater(() -> { statusLeft.setText("已保存: " + n); loadSavedConnections(); });
-            } catch (Exception ignored) {}
-        }).start());
-    }
-
-    private void deleteConn() {
-        if (savedConn == null || savedConn.getValue() == null) return;
-        String name = savedConn.getValue();
-        String id = savedConns.containsKey(name) ? savedConns.get(name).get("id") : null;
-        if (id == null || id.isEmpty()) return;
-        new Thread(() -> {
-            try {
-                HttpRequest req = HttpRequest.newBuilder().uri(URI.create("http://localhost:8080/api/v1/connections/" + id)).DELETE().build();
-                httpClient.send(req, HttpResponse.BodyHandlers.ofString());
-                Platform.runLater(() -> { statusLeft.setText("已删除: " + name); loadSavedConnections(); });
-            } catch (Exception ignored) {}
-        }).start();
-    }
-
     // ── Schema 发现 ──
     private void discoverSchemas() {
         statusLeft.setText("获取 Schema...");
@@ -588,6 +522,8 @@ public class DmaDesktopApplication extends Application {
         }).start();
     }
 
+    // ── 报告导出 ──
+
     // ── 数据库体检 ──
     private void runDbScan() {
         dbProgress.setVisible(true); statusLeft.setText("正在扫描数据库...");
@@ -606,6 +542,8 @@ public class DmaDesktopApplication extends Application {
         }).start();
     }
 
+    // ── 报告导出 ──
+
     // ── SQL 转换 ──
     private void runSqlConvert() {
         String sql = sqlInput.getText().trim(); if (sql.isEmpty()) return;
@@ -622,6 +560,8 @@ public class DmaDesktopApplication extends Application {
             } catch (Exception e) { Platform.runLater(() -> statusLeft.setText("转换失败")); }
         }).start();
     }
+
+    // ── 报告导出 ──
 
     // ── 存储过程转换 ──
     private void runProcedureConvert() {
@@ -640,6 +580,8 @@ public class DmaDesktopApplication extends Application {
         }).start();
     }
 
+    // ── 报告导出 ──
+
     // ── 项目扫描 ──
     private void runProjectScan() {
         projProgress.setVisible(true); statusLeft.setText("正在扫描项目...");
@@ -656,6 +598,8 @@ public class DmaDesktopApplication extends Application {
         }).start();
     }
 
+    // ── 报告导出 ──
+
     // ── AI ──
     private void checkAiStatus() {
         new Thread(() -> {
@@ -669,6 +613,8 @@ public class DmaDesktopApplication extends Application {
             } catch (Exception e) { Platform.runLater(() -> { aiStatus.setText("✗ AI 不可用"); aiStatus.setTextFill(Color.valueOf("#dc2626")); }); }
         }).start();
     }
+
+    // ── 报告导出 ──
 
     private void askAi() {
         String input = aiInput.getText().trim(); if (input.isEmpty()) return;
@@ -689,6 +635,8 @@ public class DmaDesktopApplication extends Application {
             } catch (Exception e) { Platform.runLater(() -> statusLeft.setText("AI 请求失败")); }
         }).start();
     }
+
+    // ── 报告导出 ──
 
     // ── 报告导出 ──
     private void exportReport(String title, String subtitle, String content) {
@@ -854,6 +802,8 @@ public class DmaDesktopApplication extends Application {
             } catch (Exception ignored) {}
         }).start();
     }
+
+    // ── 报告导出 ──
 
     // ═══════════════════════════════════════════════════════════════
     // 格式化方法

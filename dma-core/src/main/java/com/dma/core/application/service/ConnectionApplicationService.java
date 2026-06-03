@@ -5,6 +5,7 @@ import com.dma.common.exception.ConnectionTimeoutException;
 import com.dma.core.domain.model.connection.ConnectionId;
 import com.dma.core.domain.model.connection.DatabaseConnection;
 import com.dma.core.domain.repository.ConnectionRepository;
+import com.dma.core.infrastructure.util.CryptoUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -14,12 +15,17 @@ import java.util.List;
 public class ConnectionApplicationService {
     private static final Logger log = LoggerFactory.getLogger(ConnectionApplicationService.class);
     private final ConnectionRepository repository;
+    private final CryptoUtil crypto;
 
-    public ConnectionApplicationService(ConnectionRepository repository) { this.repository = repository; }
+    public ConnectionApplicationService(ConnectionRepository repository, CryptoUtil crypto) {
+        this.repository = repository;
+        this.crypto = crypto;
+    }
 
     public ConnectionId create(String name, String dbType, String host, int port, String username, String password, String database) {
         if (repository.existsByName(name)) throw new ConnectionException("CONN_004", "连接名已存在: " + name);
-        DatabaseConnection conn = new DatabaseConnection(name, DatabaseType.valueOf(dbType), host, port, username, password, database);
+        String encrypted = crypto.encrypt(password);
+        DatabaseConnection conn = new DatabaseConnection(name, DatabaseType.valueOf(dbType), host, port, username, encrypted, database);
         return repository.save(conn);
     }
 
@@ -44,10 +50,11 @@ public class ConnectionApplicationService {
     private String buildJdbcUrl(DatabaseType dbType, String host, int port, String database) {
         return switch (dbType) {
             case MYSQL -> String.format("jdbc:mysql://%s:%d/%s?useSSL=false&connectTimeout=5000", host, port, database != null ? database : "");
-            case POSTGRESQL -> String.format("jdbc:postgresql://%s:%d/%s?connectTimeout=5", host, port, database != null ? database : "");
+            case POSTGRESQL, GAUSSDB -> String.format("jdbc:postgresql://%s:%d/%s?connectTimeout=5", host, port, database != null ? database : "");
             case ORACLE -> String.format("jdbc:oracle:thin:@%s:%d:%s", host, port, database != null ? database : "");
+            case SQLSERVER -> String.format("jdbc:sqlserver://%s:%d;databaseName=%s;encrypt=false;trustServerCertificate=true", host, port, database != null ? database : "");
             case DAMENG -> String.format("jdbc:dm://%s:%d/%s", host, port, database != null ? database : "");
-            default -> String.format("jdbc:mysql://%s:%d/%s", host, port, database != null ? database : "");
+            case OCEANBASE, GOLDENDB -> String.format("jdbc:mysql://%s:%d/%s?useSSL=false&connectTimeout=5000", host, port, database != null ? database : "");
         };
     }
 }

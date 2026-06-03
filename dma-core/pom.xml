@@ -70,6 +70,14 @@
             <artifactId>ojdbc8</artifactId>
             <version>21.9.0.0</version>
         </dependency>
+        <!-- SQL Server -->
+        <dependency>
+            <groupId>com.microsoft.sqlserver</groupId>
+            <artifactId>mssql-jdbc</artifactId>
+            <version>12.6.1.jre11</version>
+            <scope>runtime</scope>
+        </dependency>
+
         <!-- Dameng JDBC (需手动安装到本地仓库: mvn install:install-file) -->
         <!-- <dependency>
             <groupId>com.dameng</groupId>
