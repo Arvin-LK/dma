@@ -1,21 +1,76 @@
 <idea-plugin>
     <id>com.dma.idea</id>
     <name>Database Migration Assistant</name>
-    <vendor>DMA Team</vendor>
-    <description>
-        数据库迁移与兼容性分析工具。
-        支持 SQL 实时检测、代码高亮提示、Alt+Enter 自动修复、项目一键扫描。
-    </description>
+    <vendor email="arvin-lk@github.com" url="https://github.com/Arvin-LK/dma">DMA Team</vendor>
 
-    <!-- 后续 Phase 实现 -->
+    <description><![CDATA[
+        数据库迁移与兼容性分析工具。
+        <ul>
+            <li>SQL 实时兼容性检测（Java/XML/SQL 文件）</li>
+            <li>代码高亮提示（ERROR/WARNING/INFO）</li>
+            <li>Alt+Enter 一键自动修复</li>
+            <li>项目全量扫描 + 迁移报告</li>
+            <li>支持 MySQL/Oracle/SQLServer → PG/GaussDB/达梦/OceanBase/GoldenDB</li>
+        </ul>
+    ]]></description>
+
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.modules.java</depends>
 
+    <!-- 注册 SQL 兼容性检测 Inspection -->
     <extensions defaultExtensionNs="com.intellij">
-        <!-- TODO: Phase 3+ 注册 Inspection 和 Intention -->
+        <localInspection
+            language="JAVA"
+            groupName="DMA"
+            displayName="SQL 兼容性检测"
+            enabledByDefault="true"
+            level="WARNING"
+            implementationClass="com.dma.idea.inspection.SqlCompatibilityInspection"/>
+
+        <localInspection
+            language="XML"
+            groupName="DMA"
+            displayName="MyBatis XML SQL 检测"
+            enabledByDefault="true"
+            level="WARNING"
+            implementationClass="com.dma.idea.inspection.SqlCompatibilityInspection"/>
+
+        <localInspection
+            language="SQL"
+            groupName="DMA"
+            displayName="SQL 文件兼容性检测"
+            enabledByDefault="true"
+            level="WARNING"
+            implementationClass="com.dma.idea.inspection.SqlCompatibilityInspection"/>
+
+        <!-- 注册 Intention 自动修复 -->
+        <intentionAction>
+            <className>com.dma.idea.inspection.ConvertQuickFix</className>
+            <category>DMA</category>
+            <descriptionDirectoryName>DMA SQL 自动转换</descriptionDirectoryName>
+        </intentionAction>
+
+        <!-- 注册项目级服务：规则引擎 -->
+        <projectService
+            serviceInterface="com.dma.core.domain.service.SqlCompatibilityAnalyzer"
+            serviceImplementation="com.dma.idea.service.DmaProjectService"/>
     </extensions>
 
+    <!-- 注册菜单 Action -->
     <actions>
-        <!-- TODO: Phase 3+ 注册项目扫描 Action -->
+        <action
+            id="DMA.ScanProject"
+            class="com.dma.idea.action.ProjectScanAction"
+            text="DMA 项目扫描"
+            description="扫描整个项目的 SQL 兼容性问题并生成报告">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+        <action
+            id="DMA.ConfigureMigration"
+            class="com.dma.idea.action.ConfigureMigrationAction"
+            text="DMA 迁移配置"
+            description="配置源数据库和目标数据库类型">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
     </actions>
 </idea-plugin>

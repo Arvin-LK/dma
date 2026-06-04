@@ -52,3 +52,5 @@ credentials.properties
 *.db
 *.sqlite3
 DMA-v1.0.0-win64.zip
+DMA-v1.1.0-*.zip
+DMA-v1.1.0-*.tar.gz
