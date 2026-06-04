@@ -95,14 +95,11 @@ public class ReportController {
         html.append("            font-size:12px; color:#94a3b8; text-align:center; }\n");
         html.append("</style>\n</head>\n<body>\n");
         html.append("<div class=\"report\">\n");
-        html.append("<div class=\"header\">\n");
-        html.append("  <h1>").append(escape(title)).append("</h1>\n");
+        html.append("<h1 style='font-size:18px;color:#1f2937;margin:0 0 4px 0;padding:0;font-weight:600'>").append(escape(title)).append("</h1>\n");
         if (subtitle != null && !subtitle.isBlank()) {
-            html.append("  <p>").append(escape(subtitle)).append("</p>\n");
+            html.append("<p style='font-size:13px;color:#6b7280;margin:0 0 16px 0;padding:0'>").append(escape(subtitle)).append("</p>\n");
         }
-        html.append("</div>\n");
         html.append("<div class=\"meta\">\n");
-        html.append("  <span>Database Migration Assistant (DMA)</span>\n");
         html.append("  <span>生成时间: ").append(LocalDateTime.now()
                 .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))).append("</span>\n");
         html.append("</div>\n");
@@ -133,10 +130,8 @@ public class ReportController {
 
         html.append(formatted);
         html.append("</div>\n");
-        html.append("<div class=\"footer\">\n");
-        html.append("  <p>DMA — Database Migration Assistant v1.0.0</p>\n");
-        html.append("  <p>本报告由 DMA 自动生成 | github.com/Arvin-LK/dma</p>\n");
-        html.append("</div>\n</div>\n</body>\n</html>");
+        html.append("<div class=\"footer\">本报告由 DMA 自动生成</div>\n");
+        html.append("</div>\n</body>\n</html>");
 
         return html.toString().getBytes(StandardCharsets.UTF_8);
     }
@@ -229,7 +224,7 @@ public class ReportController {
         html.append(escaped.replace("\n", "<br/>\n"));
         html.append("</pre>\n");
 
-        html.append("<div class=\"footer\">DMA v1.0.0 | github.com/Arvin-LK/dma</div>\n");
+        html.append("<div class=\"footer\">本报告由 DMA 自动生成</div>\n");
         html.append("</body>\n</html>");
         return html.toString();
     }

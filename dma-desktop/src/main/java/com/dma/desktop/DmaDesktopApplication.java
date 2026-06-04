@@ -110,7 +110,10 @@ public class DmaDesktopApplication extends Application {
         Label logoTitle = new Label("DMA");
         logoTitle.setFont(Font.font("System", FontWeight.BOLD, 18));
         logoTitle.setTextFill(Color.WHITE);
-        logoBox.getChildren().add(logoTitle);
+        Label logoSub = new Label("Database Migration Assistant");
+        logoSub.setFont(Font.font("System", 9));
+        logoSub.setTextFill(Color.valueOf("#bfd6f6"));
+        logoBox.getChildren().addAll(logoTitle, logoSub);
         sidebar.getChildren().add(logoBox);
 
         // 导航分组标签
