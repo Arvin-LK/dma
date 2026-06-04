@@ -1,19 +1,18 @@
-<idea-plugin>
-    <id>com.dma.idea</id>
+<idea-plugin version="2">
+    <id>com.dma.idea-plugin</id>
     <name>Database Migration Assistant</name>
     <vendor email="arvin-lk@github.com" url="https://github.com/Arvin-LK/dma">DMA Team</vendor>
     <version>1.1.0</version>
 
-    <!-- 兼容 IDEA 2021.1 及以上所有版本 -->
-    <idea-version since-build="211" until-build="999.*"/>
+    <idea-version since-build="193"/>
 
     <description><![CDATA[
         DMA — 数据库迁移兼容性检测。
-        实时检查 Java 字符串中的 SQL 语句，支持 MySQL/Oracle/SQLServer → PG/GaussDB/达梦。
+        实时检查 Java 字符串中的 SQL 语句，支持 MySQL/Oracle/SQLServer → PG/GaussDB/达梦 迁移检测。
+        322条规则，15条迁移路径。
     ]]></description>
 
-    <depends>com.intellij.modules.platform</depends>
-    <depends>com.intellij.modules.java</depends>
+    <depends>com.intellij.modules.lang</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <localInspection
