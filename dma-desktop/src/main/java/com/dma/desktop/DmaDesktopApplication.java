@@ -478,7 +478,7 @@ public class DmaDesktopApplication extends Application {
         VBox cfgCard = card();
         cfgCard.getChildren().add(secLabel("大模型连接配置"));
 
-        aiProvider = cbv("ollama", 110, "ollama", "openai", "custom");
+        aiProvider = cbv("ollama", 110, "ollama", "openai", "deepseek", "qwen", "zhipu", "moonshot", "custom");
         aiProvider.setOnAction(e -> onProviderChange());
         aiUrl = tfld("http://localhost:11434/v1", 280);
         aiKey = new TextField(); aiKey.setPrefWidth(200); aiKey.setPromptText("API Key（Ollama本地无需填写）");
@@ -521,19 +521,42 @@ public class DmaDesktopApplication extends Application {
     private void onProviderChange() {
         if (aiProvider == null) return;
         String p = aiProvider.getValue();
-        if ("ollama".equals(p)) {
-            aiUrl.setText("http://localhost:11434/v1");
-            aiKey.setText("");
-            aiKey.setPromptText("Ollama 本地无需 API Key");
-            aiModel.setText("qwen2.5:7b");
-        } else if ("openai".equals(p)) {
-            aiUrl.setText("https://api.openai.com/v1");
-            aiKey.setPromptText("sk-...");
-            aiModel.setText("gpt-4o-mini");
-        } else {
-            aiUrl.setText("http://localhost:8000/v1");
-            aiKey.setPromptText("API Key");
-            aiModel.setText("deepseek-chat");
+        switch (p) {
+            case "ollama" -> {
+                aiUrl.setText("http://localhost:11434/v1");
+                aiKey.setText(""); aiKey.setPromptText("本地无需 API Key");
+                aiModel.setText("qwen2.5:7b");
+            }
+            case "openai" -> {
+                aiUrl.setText("https://api.openai.com/v1");
+                aiKey.setPromptText("sk-...");
+                aiModel.setText("gpt-4o-mini");
+            }
+            case "deepseek" -> {
+                aiUrl.setText("https://api.deepseek.com/v1");
+                aiKey.setPromptText("sk-...");
+                aiModel.setText("deepseek-chat");
+            }
+            case "qwen" -> {
+                aiUrl.setText("https://dashscope.aliyuncs.com/compatible-mode/v1");
+                aiKey.setPromptText("sk-...");
+                aiModel.setText("qwen-plus");
+            }
+            case "zhipu" -> {
+                aiUrl.setText("https://open.bigmodel.cn/api/paas/v4");
+                aiKey.setPromptText("API Key");
+                aiModel.setText("glm-4-flash");
+            }
+            case "moonshot" -> {
+                aiUrl.setText("https://api.moonshot.cn/v1");
+                aiKey.setPromptText("sk-...");
+                aiModel.setText("moonshot-v1-8k");
+            }
+            default -> {
+                aiUrl.setText("http://localhost:8000/v1");
+                aiKey.setPromptText("API Key");
+                aiModel.setText("自定义模型");
+            }
         }
     }
 
@@ -596,10 +619,13 @@ public class DmaDesktopApplication extends Application {
                         .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
                 String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
                 Platform.runLater(() -> {
-                    if (resp.contains("\"success\":true")) {
+                    // Extract data section to check success field (not API wrapper code)
+                    String data = resp.contains("\"data\":") ? resp.substring(resp.indexOf("\"data\":") + 7) : resp;
+                    if (data.contains("\"success\":true")) {
                         aiStatus.setText("连接成功"); aiStatus.setTextFill(Color.valueOf("#059669"));
                     } else {
-                        aiStatus.setText("连接失败: " + ej(resp, "message"));
+                        String msg = ej(data, "message");
+                        aiStatus.setText("连接失败: " + (msg.isEmpty() ? "无法访问" : msg));
                         aiStatus.setTextFill(Color.valueOf("#dc2626"));
                     }
                 });
