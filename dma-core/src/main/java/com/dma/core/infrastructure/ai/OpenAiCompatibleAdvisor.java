@@ -6,78 +6,81 @@ import com.dma.core.infrastructure.config.AiConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.sql.*;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
-/**
- * OpenAI 兼容 API 适配器。
- *
- * 一套代码支持多种部署模式：
- *   - Ollama (本地):     provider=ollama,  url=http://localhost:11434/v1
- *   - OpenAI (云端):     provider=openai,  url=https://api.openai.com/v1
- *   - 通义千问 (云端):   provider=custom,  url=https://dashscope.aliyuncs.com/compatible-mode/v1
- *   - DeepSeek (云端):   provider=custom,  url=https://api.deepseek.com/v1
- *   - vLLM (内网):       provider=custom,  url=http://192.168.1.100:8000/v1
- *   - LocalAI (内网):    provider=custom,  url=http://localhost:8080/v1
- *
- * 以上服务均兼容 OpenAI 的 /chat/completions 接口格式。
- */
 @Component
-@ConditionalOnProperty(name = "dma.ai.provider", havingValue = "ollama", matchIfMissing = false)
 public class OpenAiCompatibleAdvisor implements AiAdvisor {
 
     private static final Logger log = LoggerFactory.getLogger(OpenAiCompatibleAdvisor.class);
     private final ObjectMapper mapper = new ObjectMapper();
     private final HttpClient httpClient;
+    private final String dbPath;
 
-    private final String apiUrl;
-    private final String apiKey;
-    private final String model;
+    private volatile String apiUrl;
+    private volatile String apiKey;
+    private volatile String model;
+    private volatile boolean available;
     private final String systemPrompt;
-    private final boolean available;
 
-    public OpenAiCompatibleAdvisor(AiConfig config) {
+    public OpenAiCompatibleAdvisor(AiConfig config,
+                                   @Value("${dma.database-path:${user.home}/.dma/dma.db}") String dbPath) {
+        this.dbPath = dbPath;
         this.systemPrompt = config.getSystemPrompt();
+        this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
-        // 根据 provider 选择配置
+        // Try DB settings first, fall back to application.yml
+        if (!loadFromDb()) {
+            loadFromConfig(config);
+        }
+        this.available = checkAvailability();
+        log.info("AI Advisor initialized: model={}, url={}, available={}", model, apiUrl, available);
+    }
+
+    /** Load settings from SQLite. Returns true if non-default settings found. */
+    private boolean loadFromDb() {
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(
+                 "SELECT provider, api_url, api_key, model FROM ai_settings WHERE id=1")) {
+            if (rs.next() && !"noop".equals(rs.getString("provider"))) {
+                this.apiUrl = rs.getString("api_url");
+                this.apiKey = rs.getString("api_key");
+                this.model = rs.getString("model");
+                this.apiUrl = apiUrl.endsWith("/") ? apiUrl + "chat/completions" : apiUrl + "/chat/completions";
+                log.info("AI config loaded from database: model={}", model);
+                return true;
+            }
+        } catch (SQLException e) { log.debug("DB AI settings not available, using YML defaults"); }
+        return false;
+    }
+
+    private void loadFromConfig(AiConfig config) {
         String url, key, mdl;
         switch (config.getProvider()) {
-            case "openai" -> {
-                url = config.getOpenai().getUrl();
-                key = config.getOpenai().getApiKey();
-                mdl = config.getOpenai().getModel();
-            }
-            case "custom" -> {
-                url = config.getCustom().getUrl();
-                key = config.getCustom().getApiKey();
-                mdl = config.getCustom().getModel();
-            }
-            default -> { // ollama
-                url = config.getOllama().getUrl();
-                key = ""; // Ollama doesn't need API key
-                mdl = config.getOllama().getModel();
-            }
+            case "openai" -> { url = config.getOpenai().getUrl(); key = config.getOpenai().getApiKey(); mdl = config.getOpenai().getModel(); }
+            case "custom" -> { url = config.getCustom().getUrl(); key = config.getCustom().getApiKey(); mdl = config.getCustom().getModel(); }
+            default -> { url = config.getOllama().getUrl(); key = ""; mdl = config.getOllama().getModel(); }
         }
         this.apiUrl = url.endsWith("/") ? url + "chat/completions" : url + "/chat/completions";
         this.apiKey = key;
         this.model = mdl;
+    }
 
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
-                .build();
-
-        // 检测可用性
+    /** Reload configuration from database (called after settings save). */
+    public void reload() {
+        loadFromDb();
         this.available = checkAvailability();
-        log.info("AI Advisor initialized: provider={}, model={}, url={}, available={}",
-                config.getProvider(), model, apiUrl, available);
+        log.info("AI config reloaded: model={}, available={}", model, available);
     }
 
     @Override

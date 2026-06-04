@@ -55,6 +55,8 @@ public class DmaDesktopApplication extends Application {
     // ── AI页字段 ──
     private TextArea aiInput, aiResult;
     private Label aiStatus;
+    private ComboBox<String> aiProvider;
+    private TextField aiUrl, aiKey, aiModel;
 
     public static void main(String[] args) { launch(args); }
 
@@ -472,25 +474,137 @@ public class DmaDesktopApplication extends Application {
     private ScrollPane buildAiPage() {
         VBox root = pageContainer();
 
-        // ── Zone 1: 状态配置卡 ──
+        // ── Zone 1: AI 配置卡 ──
         VBox cfgCard = card();
-        cfgCard.getChildren().add(secLabel("AI 服务状态"));
-        aiStatus = lbl("检查 AI 服务连接状态..."); aiStatus.setFont(Font.font("System", 13));
-        Button checkBtn = sbtn("🔄 检查连接"); checkBtn.setOnAction(e -> checkAiStatus());
+        cfgCard.getChildren().add(secLabel("大模型连接配置"));
+
+        aiProvider = cbv("ollama", 110, "ollama", "openai", "custom");
+        aiProvider.setOnAction(e -> onProviderChange());
+        aiUrl = tfld("http://localhost:11434/v1", 280);
+        aiKey = new TextField(); aiKey.setPrefWidth(200); aiKey.setPromptText("API Key（Ollama本地无需填写）");
+        aiKey.setStyle(fieldStyle());
+        aiModel = tfld("qwen2.5:7b", 160);
+
+        HBox row1 = hbox(8, lbl("Provider:"), aiProvider, lbl("URL:"), aiUrl);
+        HBox row2 = hbox(8, lbl("API Key:"), aiKey, lbl("Model:"), aiModel);
+        cfgCard.getChildren().addAll(row1, row2);
+
+        // ── Zone 2: 操作按钮 + 状态 ──
+        aiStatus = lbl("未配置"); aiStatus.setFont(Font.font("System", 13));
+        Button loadBtn = sbtn("📂 加载配置"); loadBtn.setOnAction(e -> loadAiSettings());
+        Button saveBtn = pbtn("💾 保存配置"); saveBtn.setOnAction(e -> saveAiSettings());
+        Button testBtn = sbtn("🔗 测试连接"); testBtn.setOnAction(e -> testAiConnection());
         Button askBtn = pbtn("💡 咨询 AI"); askBtn.setOnAction(e -> askAi());
-        HBox cfgRow = hbox(12, aiStatus, checkBtn, askBtn);
-        cfgCard.getChildren().add(cfgRow);
+        HBox btnRow = hbox(10, loadBtn, saveBtn, testBtn, askBtn, aiStatus);
 
-        // ── Zone 2: 问题输入区 ──
-        aiInput = editorArea("粘贴 SQL 或描述数据库迁移问题...\n\n支持: Ollama 本地模型 / OpenAI / 通义千问 / DeepSeek\n配置: application.yml → dma.ai.provider");
+        // ── Zone 3: 问题输入 (30%) ──
+        aiInput = editorArea("在此输入数据库迁移相关问题，AI 将给出专业建议...");
 
-        // ── Zone 3: AI 回复区 ──
+        // ── Zone 4: AI 回复 (70%) ──
         aiResult = resultArea("AI 回复将显示在此...");
         aiResult.setStyle(resultStyle());
 
-        root.getChildren().addAll(cfgCard, aiInput, aiResult);
-        VBox.setVgrow(aiResult, Priority.ALWAYS);
+        GridPane splitGrid = new GridPane();
+        RowConstraints r1 = new RowConstraints(); r1.setPercentHeight(30);
+        RowConstraints r2 = new RowConstraints(); r2.setPercentHeight(70);
+        splitGrid.getRowConstraints().addAll(r1, r2);
+        ColumnConstraints col = new ColumnConstraints(); col.setPercentWidth(100);
+        splitGrid.getColumnConstraints().add(col);
+        splitGrid.add(aiInput, 0, 0);
+        splitGrid.add(aiResult, 0, 1);
+        VBox.setVgrow(splitGrid, Priority.ALWAYS);
+
+        root.getChildren().addAll(cfgCard, btnRow, splitGrid);
         return wrap(root);
+    }
+
+    private void onProviderChange() {
+        if (aiProvider == null) return;
+        String p = aiProvider.getValue();
+        if ("ollama".equals(p)) {
+            aiUrl.setText("http://localhost:11434/v1");
+            aiKey.setText("");
+            aiKey.setPromptText("Ollama 本地无需 API Key");
+            aiModel.setText("qwen2.5:7b");
+        } else if ("openai".equals(p)) {
+            aiUrl.setText("https://api.openai.com/v1");
+            aiKey.setPromptText("sk-...");
+            aiModel.setText("gpt-4o-mini");
+        } else {
+            aiUrl.setText("http://localhost:8000/v1");
+            aiKey.setPromptText("API Key");
+            aiModel.setText("deepseek-chat");
+        }
+    }
+
+    private void loadAiSettings() {
+        new Thread(() -> {
+            try {
+                HttpRequest req = HttpRequest.newBuilder().uri(URI.create("http://localhost:8080/api/v1/ai/settings")).GET().build();
+                String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
+                Platform.runLater(() -> {
+                    String provider = ej(resp, "provider");
+                    if (!provider.isEmpty() && !"noop".equals(provider)) {
+                        aiProvider.setValue(provider);
+                        aiUrl.setText(ej(resp, "apiUrl"));
+                        aiModel.setText(ej(resp, "model"));
+                        aiKey.setText("");
+                        aiKey.setPromptText("已保存 (仅显示后4位: " + ej(resp, "apiKey") + ")");
+                        aiStatus.setText("配置已加载");
+                        aiStatus.setTextFill(Color.valueOf("#059669"));
+                    } else {
+                        aiStatus.setText("未配置，请填写后保存");
+                        aiStatus.setTextFill(Color.valueOf("#d97706"));
+                    }
+                });
+            } catch (Exception e) { Platform.runLater(() -> { aiStatus.setText("加载失败"); aiStatus.setTextFill(Color.valueOf("#dc2626")); }); }
+        }).start();
+    }
+
+    private void saveAiSettings() {
+        String provider = aiProvider.getValue();
+        String url = aiUrl.getText().trim();
+        String key = aiKey.getText().trim();
+        String model = aiModel.getText().trim();
+
+        new Thread(() -> {
+            try {
+                String body = String.format("""
+{"provider":"%s","apiUrl":"%s","apiKey":"%s","model":"%s"}""",
+                        esc(provider), esc(url), esc(key), esc(model));
+                HttpRequest req = HttpRequest.newBuilder().uri(URI.create("http://localhost:8080/api/v1/ai/settings"))
+                        .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
+                String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
+                Platform.runLater(() -> {
+                    if (resp.contains("\"code\":0") || resp.contains("已保存")) {
+                        aiStatus.setText("已保存"); aiStatus.setTextFill(Color.valueOf("#059669"));
+                    } else { aiStatus.setText("保存失败"); aiStatus.setTextFill(Color.valueOf("#dc2626")); }
+                });
+            } catch (Exception e) { Platform.runLater(() -> { aiStatus.setText("保存失败"); aiStatus.setTextFill(Color.valueOf("#dc2626")); }); }
+        }).start();
+    }
+
+    private void testAiConnection() {
+        String url = aiUrl.getText().trim();
+        String key = aiKey.getText().trim();
+        aiStatus.setText("测试中...");
+        new Thread(() -> {
+            try {
+                String body = String.format("""
+{"apiUrl":"%s","apiKey":"%s"}""", esc(url), esc(key));
+                HttpRequest req = HttpRequest.newBuilder().uri(URI.create("http://localhost:8080/api/v1/ai/test"))
+                        .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build();
+                String resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString()).body();
+                Platform.runLater(() -> {
+                    if (resp.contains("\"success\":true")) {
+                        aiStatus.setText("连接成功"); aiStatus.setTextFill(Color.valueOf("#059669"));
+                    } else {
+                        aiStatus.setText("连接失败: " + ej(resp, "message"));
+                        aiStatus.setTextFill(Color.valueOf("#dc2626"));
+                    }
+                });
+            } catch (Exception e) { Platform.runLater(() -> { aiStatus.setText("测试失败"); aiStatus.setTextFill(Color.valueOf("#dc2626")); }); }
+        }).start();
     }
 
     // ═══════════════════════════════════════════════════════════════

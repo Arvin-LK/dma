@@ -142,6 +142,20 @@ public class DatabaseInitializer implements CommandLineRunner {
                     (6, '其他', 99)
                 """);
 
+            // AI 设置表
+            stmt.execute("""
+                CREATE TABLE IF NOT EXISTS ai_settings (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    provider VARCHAR(20) NOT NULL DEFAULT 'noop',
+                    api_url VARCHAR(500) NOT NULL DEFAULT 'http://localhost:11434/v1',
+                    api_key VARCHAR(500) NOT NULL DEFAULT '',
+                    model VARCHAR(100) NOT NULL DEFAULT 'qwen2.5:7b',
+                    timeout_seconds INTEGER NOT NULL DEFAULT 120,
+                    updated_at TEXT DEFAULT (datetime('now','localtime'))
+                )
+                """);
+            stmt.execute("INSERT OR IGNORE INTO ai_settings (id) VALUES (1)");
+
             // 创建索引
             stmt.execute("CREATE INDEX IF NOT EXISTS idx_task_status ON migration_task(status)");
             stmt.execute("CREATE INDEX IF NOT EXISTS idx_result_task ON scan_result(task_id)");
