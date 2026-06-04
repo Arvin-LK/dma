@@ -401,15 +401,22 @@ public class DmaDesktopApplication extends Application {
         HBox cfgRow = hbox(12, lbl("源数据库:"), sqlSource, lbl("目标数据库:"), sqlTarget, scanBtn, exportBtn);
         cfgCard.getChildren().add(cfgRow);
 
-        // ── Zone 2: SQL 输入区 ──
+        // ── Zone 2+3: 输入/输出 3:7 比例 ──
         sqlInput = editorArea("在此输入 SQL 语句...\n\n示例:\nSELECT IFNULL(name, '') FROM users LIMIT 0, 10;");
-
-        // ── Zone 3: 结果输出区 ──
         sqlResult = resultArea("分析结果将显示在此 — 包含规则匹配详情、原始 SQL 与转换后 SQL 对比...");
-        sqlResult.setEditable(true); // 允许复制
+        sqlResult.setEditable(true);
 
-        root.getChildren().addAll(cfgCard, sqlInput, sqlResult);
-        VBox.setVgrow(sqlResult, Priority.ALWAYS);
+        GridPane splitGrid = new GridPane();
+        RowConstraints r1 = new RowConstraints(); r1.setPercentHeight(30);
+        RowConstraints r2 = new RowConstraints(); r2.setPercentHeight(70);
+        splitGrid.getRowConstraints().addAll(r1, r2);
+        ColumnConstraints col = new ColumnConstraints(); col.setPercentWidth(100);
+        splitGrid.getColumnConstraints().add(col);
+        splitGrid.add(sqlInput, 0, 0);
+        splitGrid.add(sqlResult, 0, 1);
+        VBox.setVgrow(splitGrid, Priority.ALWAYS);
+
+        root.getChildren().addAll(cfgCard, splitGrid);
         return wrap(root);
     }
 
@@ -429,14 +436,21 @@ public class DmaDesktopApplication extends Application {
         HBox cfgRow = hbox(12, lbl("源数据库:"), spSource, lbl("目标数据库:"), spTarget, convBtn);
         cfgCard.getChildren().add(cfgRow);
 
-        // ── Zone 2: DDL 输入区 ──
+        // ── Zone 2+3: 输入/输出 3:7 比例 ──
         spInput = editorArea("粘贴 CREATE PROCEDURE / FUNCTION / TRIGGER / VIEW 的 DDL 语句...");
-
-        // ── Zone 3: 结果输出区 ──
         spResult = resultArea("转换结果将显示在此 — 包含原始 DDL、转换后 DDL 及变更清单...");
 
-        root.getChildren().addAll(cfgCard, spInput, spResult);
-        VBox.setVgrow(spResult, Priority.ALWAYS);
+        GridPane splitGrid = new GridPane();
+        RowConstraints r1 = new RowConstraints(); r1.setPercentHeight(30);
+        RowConstraints r2 = new RowConstraints(); r2.setPercentHeight(70);
+        splitGrid.getRowConstraints().addAll(r1, r2);
+        ColumnConstraints col = new ColumnConstraints(); col.setPercentWidth(100);
+        splitGrid.getColumnConstraints().add(col);
+        splitGrid.add(spInput, 0, 0);
+        splitGrid.add(spResult, 0, 1);
+        VBox.setVgrow(splitGrid, Priority.ALWAYS);
+
+        root.getChildren().addAll(cfgCard, splitGrid);
         return wrap(root);
     }
 
