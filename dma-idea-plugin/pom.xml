@@ -15,8 +15,8 @@
     <description>IntelliJ IDEA 插件 — 实时 SQL 检测 + Alt+Enter 修复</description>
 
     <properties>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
         <skipTests>true</skipTests>
         <idea.home>D:/DEV_Application/IntelliJ IDEA 2021.2.1</idea.home>
     </properties>

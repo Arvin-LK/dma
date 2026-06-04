@@ -4,23 +4,23 @@
     <vendor email="arvin-lk@github.com" url="https://github.com/Arvin-LK/dma">DMA Team</vendor>
     <version>1.1.0</version>
 
+    <!-- 兼容 IDEA 2021.1 及以上所有版本 -->
+    <idea-version since-build="211" until-build="999.*"/>
+
     <description><![CDATA[
-        数据库迁移与兼容性分析工具。
-        支持 MySQL/Oracle/SQLServer → PostgreSQL/GaussDB/达梦 迁移检测。
-        在 Java 字符串和 SQL 文件中实时检测兼容性问题并提供修复建议。
+        DMA — 数据库迁移兼容性检测。
+        实时检查 Java 字符串中的 SQL 语句，支持 MySQL/Oracle/SQLServer → PG/GaussDB/达梦。
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.modules.java</depends>
 
     <extensions defaultExtensionNs="com.intellij">
-        <!-- SQL 兼容性检测 -->
         <localInspection
             groupName="DMA"
             displayName="SQL 兼容性检测"
             enabledByDefault="true"
             level="WARNING"
-            implementationClass="com.dma.idea.inspection.SqlCompatibilityInspection"
-            language="JAVA"/>
+            implementationClass="com.dma.idea.inspection.SqlCompatibilityInspection"/>
     </extensions>
 </idea-plugin>
