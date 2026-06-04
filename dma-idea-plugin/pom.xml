@@ -51,10 +51,10 @@
         </dependency>
         <dependency>
             <groupId>com.jetbrains.intellij</groupId>
-            <artifactId>dom-openapi</artifactId>
+            <artifactId>util</artifactId>
             <version>2021.2</version>
             <scope>system</scope>
-            <systemPath>${idea.home}/lib/dom-openapi.jar</systemPath>
+            <systemPath>${idea.home}/lib/util.jar</systemPath>
         </dependency>
     </dependencies>
 

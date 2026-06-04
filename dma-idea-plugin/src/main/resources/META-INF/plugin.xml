@@ -2,68 +2,25 @@
     <id>com.dma.idea</id>
     <name>Database Migration Assistant</name>
     <vendor email="arvin-lk@github.com" url="https://github.com/Arvin-LK/dma">DMA Team</vendor>
+    <version>1.1.0</version>
 
     <description><![CDATA[
         数据库迁移与兼容性分析工具。
-        <ul>
-            <li>SQL 实时兼容性检测（Java/XML/SQL 文件）</li>
-            <li>代码高亮提示（ERROR/WARNING/INFO）</li>
-            <li>Alt+Enter 一键自动修复</li>
-            <li>项目全量扫描 + 迁移报告</li>
-            <li>支持 MySQL/Oracle/SQLServer → PG/GaussDB/达梦/OceanBase/GoldenDB</li>
-        </ul>
+        支持 MySQL/Oracle/SQLServer → PostgreSQL/GaussDB/达梦 迁移检测。
+        在 Java 字符串和 SQL 文件中实时检测兼容性问题并提供修复建议。
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.modules.java</depends>
 
-    <!-- 注册 SQL 兼容性检测 Inspection -->
     <extensions defaultExtensionNs="com.intellij">
+        <!-- SQL 兼容性检测 -->
         <localInspection
-            language="JAVA"
             groupName="DMA"
             displayName="SQL 兼容性检测"
             enabledByDefault="true"
             level="WARNING"
-            implementationClass="com.dma.idea.inspection.SqlCompatibilityInspection"/>
-
-        <localInspection
-            language="XML"
-            groupName="DMA"
-            displayName="MyBatis XML SQL 检测"
-            enabledByDefault="true"
-            level="WARNING"
-            implementationClass="com.dma.idea.inspection.SqlCompatibilityInspection"/>
-
-        <localInspection
-            language="SQL"
-            groupName="DMA"
-            displayName="SQL 文件兼容性检测"
-            enabledByDefault="true"
-            level="WARNING"
-            implementationClass="com.dma.idea.inspection.SqlCompatibilityInspection"/>
-
-
-        <!-- 规则引擎加载器 (应用级别) -->
-        <applicationService
-            serviceImplementation="com.dma.idea.service.DmaPluginService"/>
+            implementationClass="com.dma.idea.inspection.SqlCompatibilityInspection"
+            language="JAVA"/>
     </extensions>
-
-    <!-- 注册菜单 Action -->
-    <actions>
-        <action
-            id="DMA.ScanProject"
-            class="com.dma.idea.action.ProjectScanAction"
-            text="DMA 项目扫描"
-            description="扫描整个项目的 SQL 兼容性问题并生成报告">
-            <add-to-group group-id="ToolsMenu" anchor="last"/>
-        </action>
-        <action
-            id="DMA.ConfigureMigration"
-            class="com.dma.idea.action.ConfigureMigrationAction"
-            text="DMA 迁移配置"
-            description="配置源数据库和目标数据库类型">
-            <add-to-group group-id="ToolsMenu" anchor="last"/>
-        </action>
-    </actions>
 </idea-plugin>
