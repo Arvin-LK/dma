@@ -1,21 +1,25 @@
 @echo off
 chcp 65001 >nul
 REM ============================================
-REM  DMA — Windows 可执行程序打包脚本
-REM  使用 JDK 17 内置 jpackage 工具
-REM  输出: dist\DMA\DMA.exe (自包含，无需安装 JDK)
+REM  DMA — 全平台打包脚本
+REM  Windows: .exe (自包含 JRE)
+REM  macOS:   .tar.gz (便携版, 需 JDK 17)
 REM ============================================
 
 set JAVA_HOME=D:\DEV_Application\Java\jdk17
 set PATH=%JAVA_HOME%\bin;%PATH%
 
+REM 版本号（每次发布修改此处）
+set VERSION=1.1.0
+
 echo.
 echo ╔══════════════════════════════════════════╗
 echo ║   DMA - Database Migration Assistant    ║
-echo ║   Windows .exe 打包工具                  ║
+echo ║   全平台打包工具 v%VERSION%                ║
 echo ╚══════════════════════════════════════════╝
 echo.
 echo JDK: %JAVA_HOME%
+echo 版本: %VERSION%
 echo.
 
 REM ── Step 1: 编译安装项目 ──
