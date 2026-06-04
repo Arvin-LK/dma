@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 @Component
+@org.springframework.context.annotation.Primary
 public class OpenAiCompatibleAdvisor implements AiAdvisor {
 
     private static final Logger log = LoggerFactory.getLogger(OpenAiCompatibleAdvisor.class);
