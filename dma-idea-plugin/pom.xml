@@ -12,24 +12,13 @@
 
     <artifactId>dma-idea-plugin</artifactId>
     <name>DMA IDEA Plugin</name>
-    <description>IntelliJ IDEA 插件 — 实时 SQL 检测 + Alt+Enter 修复 + 项目扫描</description>
-
-    <!--
-        IDEA 插件使用 Gradle + IntelliJ Platform SDK 构建。
-        Maven 仅用于声明 dma-core 依赖关系。
-
-        构建方式:
-          1. 先 mvn install -DskipTests (安装 dma-core 到本地仓库)
-          2. cd dma-idea-plugin
-          3. gradle buildPlugin
-          4. 产出: build/distributions/DMA-idea-plugin-1.1.0.zip
-          5. 在 IDEA 中: Settings → Plugins → Install from Disk
-    -->
+    <description>IntelliJ IDEA 插件 — 实时 SQL 检测 + Alt+Enter 修复</description>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <skipTests>true</skipTests>
+        <idea.home>D:/DEV_Application/IntelliJ IDEA 2021.2.1</idea.home>
     </properties>
 
     <dependencies>
@@ -37,18 +26,84 @@
             <groupId>com.dma</groupId>
             <artifactId>dma-core</artifactId>
         </dependency>
+
+        <!-- IntelliJ Platform SDK (system scope from local IDEA install) -->
+        <dependency>
+            <groupId>com.jetbrains.intellij</groupId>
+            <artifactId>platform-api</artifactId>
+            <version>2021.2</version>
+            <scope>system</scope>
+            <systemPath>${idea.home}/lib/platform-api.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>com.jetbrains.intellij</groupId>
+            <artifactId>idea</artifactId>
+            <version>2021.2</version>
+            <scope>system</scope>
+            <systemPath>${idea.home}/lib/idea.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>com.jetbrains.intellij</groupId>
+            <artifactId>annotations</artifactId>
+            <version>2021.2</version>
+            <scope>system</scope>
+            <systemPath>${idea.home}/lib/annotations.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>com.jetbrains.intellij</groupId>
+            <artifactId>dom-openapi</artifactId>
+            <version>2021.2</version>
+            <scope>system</scope>
+            <systemPath>${idea.home}/lib/dom-openapi.jar</systemPath>
+        </dependency>
     </dependencies>
 
     <build>
         <plugins>
-            <!-- Maven 不编译此模块 — 用 Gradle + IntelliJ SDK 构建 -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
-                    <skipMain>true</skipMain>
-                    <skip>true</skip>
+                    <skipMain>false</skipMain>
+                    <skip>false</skip>
                 </configuration>
+            </plugin>
+            <!-- Copy dependencies for plugin ZIP -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.6.1</version>
+                <executions>
+                    <execution>
+                        <id>copy-deps</id>
+                        <phase>package</phase>
+                        <goals><goal>copy-dependencies</goal></goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/plugin-lib</outputDirectory>
+                            <includeScope>runtime</includeScope>
+                            <excludeScope>system</excludeScope>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- Assemble as IDEA plugin ZIP -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <version>3.6.0</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals><goal>single</goal></goals>
+                        <configuration>
+                            <appendAssemblyId>false</appendAssemblyId>
+                            <finalName>DMA-idea-plugin-1.1.0</finalName>
+                            <descriptors>
+                                <descriptor>src/assembly/plugin-zip.xml</descriptor>
+                            </descriptors>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

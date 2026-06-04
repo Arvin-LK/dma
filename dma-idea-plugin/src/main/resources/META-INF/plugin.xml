@@ -43,17 +43,10 @@
             level="WARNING"
             implementationClass="com.dma.idea.inspection.SqlCompatibilityInspection"/>
 
-        <!-- 注册 Intention 自动修复 -->
-        <intentionAction>
-            <className>com.dma.idea.inspection.ConvertQuickFix</className>
-            <category>DMA</category>
-            <descriptionDirectoryName>DMA SQL 自动转换</descriptionDirectoryName>
-        </intentionAction>
 
-        <!-- 注册项目级服务：规则引擎 -->
-        <projectService
-            serviceInterface="com.dma.core.domain.service.SqlCompatibilityAnalyzer"
-            serviceImplementation="com.dma.idea.service.DmaProjectService"/>
+        <!-- 规则引擎加载器 (应用级别) -->
+        <applicationService
+            serviceImplementation="com.dma.idea.service.DmaPluginService"/>
     </extensions>
 
     <!-- 注册菜单 Action -->
